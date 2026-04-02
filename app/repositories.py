@@ -357,3 +357,50 @@ class BotRepository:
             "last_comment_at": last_comment_row["ts"] if last_comment_row else None,
             "top_commenters": [dict(r) for r in top_rows],
         }
+
+    def get_dashboard_summary(self) -> dict:
+        posts_row = self.db.fetchone("SELECT COUNT(*) AS c FROM posts WHERE deleted_at IS NULL", ())
+        comments_row = self.db.fetchone("SELECT COUNT(*) AS c FROM comments", ())
+        unique_row = self.db.fetchone("SELECT COUNT(DISTINCT user_id) AS c FROM comments", ())
+        leads_row = self.db.fetchone("SELECT COUNT(*) AS c FROM leads", ())
+        return {
+            "posts": int(posts_row["c"] if posts_row else 0),
+            "comments": int(comments_row["c"] if comments_row else 0),
+            "unique_commenters": int(unique_row["c"] if unique_row else 0),
+            "leads": int(leads_row["c"] if leads_row else 0),
+        }
+
+    def get_comments_trend(self, days: int = 14) -> list[dict]:
+        days = max(1, min(365, int(days)))
+        rows = self.db.fetchall(
+            """
+            SELECT strftime('%Y-%m-%d', created_at) AS day,
+                   COUNT(*) AS comments
+            FROM comments
+            WHERE created_at >= datetime('now', ?)
+            GROUP BY day
+            ORDER BY day ASC
+            """,
+            (f"-{days} day",),
+        )
+        return [dict(r) for r in rows]
+
+    def get_posts_with_comment_counts(self, limit: int = 20) -> list[dict]:
+        limit = max(1, min(100, int(limit)))
+        rows = self.db.fetchall(
+            """
+            SELECT p.message_id,
+                   COALESCE(substr(p.text, 1, 120), '<без текста>') AS preview,
+                   p.created_at,
+                   COUNT(c.id) AS comments_count,
+                   COUNT(DISTINCT c.user_id) AS unique_commenters
+            FROM posts p
+            LEFT JOIN comments c ON c.channel_post_id = p.message_id
+            WHERE p.deleted_at IS NULL
+            GROUP BY p.message_id
+            ORDER BY p.created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(r) for r in rows]

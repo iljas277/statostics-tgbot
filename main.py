@@ -16,6 +16,7 @@ from app.config import Settings
 from app.db import Database
 from app.handlers import (
     cmd_binddiscussion,
+    cmd_chart,
     cmd_health,
     cmd_contacts,
     cmd_delete,
@@ -112,6 +113,7 @@ def build_app(settings: Settings) -> Application:
     app.add_handler(CommandHandler("edit", cmd_edit))
     app.add_handler(CommandHandler("delete", cmd_delete))
     app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("chart", cmd_chart))
     app.add_handler(CommandHandler("poststats", cmd_poststats))
     app.add_handler(CommandHandler("contacts", cmd_contacts))
     app.add_handler(CommandHandler("refreshcontacts", cmd_refreshcontacts))

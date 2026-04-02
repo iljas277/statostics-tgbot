@@ -18,6 +18,10 @@ class Settings:
     contacts_commenters_limit: int
     contacts_refresh_hour: int
     contacts_refresh_minute: int
+    web_host: str
+    web_port: int
+    web_reload: bool
+    chart_default_days: int
 
 
 def _load_dotenv(dotenv_path: Path) -> None:
@@ -68,6 +72,10 @@ def load_settings() -> Settings:
     contacts_commenters_limit = max(1, int(os.getenv("CONTACTS_COMMENTERS_LIMIT", "20")))
     contacts_refresh_hour = max(0, min(23, int(os.getenv("CONTACTS_REFRESH_HOUR", "9"))))
     contacts_refresh_minute = max(0, min(59, int(os.getenv("CONTACTS_REFRESH_MINUTE", "0"))))
+    web_host = os.getenv("WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    web_port = max(1, min(65535, int(os.getenv("WEB_PORT", "8080"))))
+    web_reload = os.getenv("WEB_RELOAD", "false").strip().lower() in {"1", "true", "yes", "on"}
+    chart_default_days = max(1, min(365, int(os.getenv("CHART_DEFAULT_DAYS", "14"))))
 
     return Settings(
         bot_token=bot_token,
@@ -81,4 +89,8 @@ def load_settings() -> Settings:
         contacts_commenters_limit=contacts_commenters_limit,
         contacts_refresh_hour=contacts_refresh_hour,
         contacts_refresh_minute=contacts_refresh_minute,
+        web_host=web_host,
+        web_port=web_port,
+        web_reload=web_reload,
+        chart_default_days=chart_default_days,
     )

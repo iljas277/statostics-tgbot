@@ -13,8 +13,9 @@ Python-бот для администрирования Telegram-канала:
   - `/edit <message_id> <new_text>`
   - `/delete <message_id>`
   - `/stats [hours]`
+   - `/chart [days]`
    - `/poststats <message_id>`
-  - `/contacts [limit]`
+   - `/contacts [limit]`
    - `/refreshcontacts`
    - `/binddiscussion`
    - `/health`
@@ -56,6 +57,10 @@ Python-бот для администрирования Telegram-канала:
       - сколько лидов пришло из комментариев этого поста;
       - время последнего комментария;
       - топ-5 комментаторов по этому посту.
+
+- `/chart [days]`
+   - Отправляет PNG-график тренда комментариев за выбранный период.
+   - Если `days` не указан, используется `CHART_DEFAULT_DAYS`.
 
 - `/contacts [limit]`
    - Показывает только ник и ссылку на профиль.
@@ -130,6 +135,10 @@ Python-бот для администрирования Telegram-канала:
 - `app/services.py` - анализ текста комментариев (lead scoring)
 - `app/handlers.py` - команды и обработка сообщений
 - `app/jobs.py` - периодические фоновые задачи
+- `app/charts.py` - генерация PNG-графиков
+- `app/web.py` - FastAPI веб-панель
+- `run_web.py` - запуск веб-панели
+- `web/templates/dashboard.html` - шаблон дашборда
 
 ## Настройки эффективности списка контактов
 
@@ -139,6 +148,25 @@ Python-бот для администрирования Telegram-канала:
 - `CONTACTS_COMMENTERS_LIMIT` - сколько комментаторов хранить в выдаче `/contacts`.
 - `CONTACTS_REFRESH_HOUR` и `CONTACTS_REFRESH_MINUTE` - ежедневное время пересборки списка.
 - `TZ` - часовой пояс для расписания.
+
+## Веб-панель FastAPI
+
+1. Установите зависимости:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Настройте в `.env`:
+   - `WEB_HOST` (например `127.0.0.1`)
+   - `WEB_PORT` (например `8080`)
+   - `CHART_DEFAULT_DAYS` (например `14`)
+3. Запустите панель:
+   ```bash
+   python run_web.py
+   ```
+4. Откройте:
+   - `http://WEB_HOST:WEB_PORT/` - дашборд
+   - `http://WEB_HOST:WEB_PORT/api/summary` - JSON-сводка
+   - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
 
 ## Дальше (Phase 2)
 

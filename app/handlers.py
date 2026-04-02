@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 
 from telegram import Message, Update
+from telegram import InputFile
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from app.repositories import BotRepository
 from app.services import analyze_comment
+from app.charts import render_comments_trend_png
 
 LOGGER = logging.getLogger(__name__)
 
@@ -102,6 +105,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Аналитика:\n"
         "- /stats [hours]\n"
         "- /poststats <message_id>\n"
+        "- /chart [days]\n"
         "- /contacts\n"
         "- /refreshcontacts\n\n"
         "Диагностика:\n"
@@ -275,6 +279,30 @@ async def cmd_poststats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             lines.append(f"  {idx}. {row['author']} ({row['comments_count']})")
 
     await update.effective_message.reply_text("\n".join(lines))
+
+
+async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = context.application.bot_data["settings"]
+    repo: BotRepository = context.application.bot_data["repo"]
+
+    if not await _require_admin(update, settings.admin_ids):
+        return
+
+    days = settings.chart_default_days
+    if context.args:
+        try:
+            days = max(1, min(365, int(context.args[0])))
+        except ValueError:
+            await update.effective_message.reply_text("Использование: /chart [days]")
+            return
+
+    trend = repo.get_comments_trend(days=days)
+    image = render_comments_trend_png(trend_rows=trend, days=days)
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=InputFile(BytesIO(image), filename=f"comments_trend_{days}d.png"),
+        caption=f"График комментариев за {days} дней",
+    )
 
 
 async def cmd_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

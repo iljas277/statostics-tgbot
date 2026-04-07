@@ -14,7 +14,9 @@ Python-бот для администрирования Telegram-канала:
   - `/delete <message_id>`
   - `/stats [hours]`
    - `/chart [days]`
-   - `/poststats <message_id>`
+   - `/tgstats [posts_limit]`
+   - `/refreshmetrics [posts_limit]`
+    - `/poststats <message_id>`
    - `/contacts [limit]`
    - `/refreshcontacts`
    - `/binddiscussion`
@@ -56,11 +58,22 @@ Python-бот для администрирования Telegram-канала:
       - число уникальных комментаторов;
       - сколько лидов пришло из комментариев этого поста;
       - время последнего комментария;
-      - топ-5 комментаторов по этому посту.
+    - топ-5 комментаторов по этому посту.
+    - (если настроен MTProto) views, reactions, forwards и разбивка реакций.
 
 - `/chart [days]`
-   - Отправляет PNG-график тренда комментариев за выбранный период.
-   - Если `days` не указан, используется `CHART_DEFAULT_DAYS`.
+    - Отправляет PNG-график тренда комментариев за выбранный период.
+    - Если `days` не указан, используется `CHART_DEFAULT_DAYS`.
+
+- `/tgstats [posts_limit]`
+   - Возвращает агрегаты Telegram API по последним постам:
+      - суммарные просмотры;
+      - средние просмотры на пост;
+      - суммарные реакции;
+      - суммарные пересылки.
+
+- `/refreshmetrics [posts_limit]`
+   - Принудительно обновляет MTProto-метрики по последним постам канала.
 
 - `/contacts [limit]`
    - Показывает только ник и ссылку на профиль.
@@ -83,9 +96,9 @@ Python-бот для администрирования Telegram-канала:
       - сколько сообщений и автофорвардов увидел бот;
       - состояние таблиц `discussion_map/comments/users`.
 
-## Ограничения Bot API
+## Ограничения Bot API и MTProto
 
-В каналах Bot API не дает надежно собирать `views` и агрегаты реакций. Для этого нужен отдельный этап с MTProto (например, Telethon).
+В каналах Bot API не дает надежно собирать `views` и агрегаты реакций. Поэтому для этих метрик используется MTProto (Telethon) с отдельными credentials.
 
 ## Быстрый старт
 
@@ -107,6 +120,7 @@ Python-бот для администрирования Telegram-канала:
    - `CHANNEL_ID`
    - `LINKED_CHAT_ID` (для комментариев)
    - `ADMIN_IDS`
+   - `TELEGRAM_API_ID` и `TELEGRAM_API_HASH` (для views/реакций)
 5. Запустите бота:
    ```bash
    python main.py
@@ -130,6 +144,15 @@ Python-бот для администрирования Telegram-канала:
 3. Для продакшена установите `autossh` и используйте `systemd`, чтобы туннель автоматически восстанавливался.
 
 Пошаговый runbook: `infra/ssh-portforwarding.md`, шаблон юнита: `infra/systemd/bot-socks-tunnel.service`.
+
+## Предстартовые тесты
+
+Перед запуском бота автоматически выполняются:
+- локальные unit-тесты (`python -m unittest discover -s tests -p "test_*.py`);
+- проверка доступа бота к Telegram и каналу;
+- при включенном MTProto — пробный запрос метрик.
+
+Отключение: `RUN_STARTUP_TESTS=false`.
 
 ## Если комментарии не считаются
 
@@ -179,10 +202,12 @@ Python-бот для администрирования Telegram-канала:
 4. Откройте:
    - `http://WEB_HOST:WEB_PORT/` - дашборд
    - `http://WEB_HOST:WEB_PORT/api/summary` - JSON-сводка
-   - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
+    - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
+    - `http://WEB_HOST:WEB_PORT/chart/views.png?days=14` - график просмотров
+    - `http://WEB_HOST:WEB_PORT/chart/reactions.png?days=14` - график реакций
 
 ## Дальше (Phase 2)
 
-- Подключение MTProto для `views` и реакций канала.
 - Экспорт лидов в CSV.
+- Расширение MTProto-метрик (ERR, retention, cohort по периодам).
 - Веб-панель (FastAPI) для операторов.

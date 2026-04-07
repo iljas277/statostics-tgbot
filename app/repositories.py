@@ -16,6 +16,15 @@ class AggregateStats:
     leads_count: int
 
 
+@dataclass(slots=True)
+class ChannelMetricStats:
+    posts_sampled: int
+    total_views: int
+    total_forwards: int
+    total_reactions: int
+    avg_views_per_post: float
+
+
 class BotRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -348,6 +357,7 @@ class BotRepository:
             """,
             (message_id,),
         )
+        latest_metric = self.get_latest_post_metric(message_id)
 
         return {
             "post": dict(post_row),
@@ -356,6 +366,7 @@ class BotRepository:
             "leads_in_comments": int(leads_row["c"] if leads_row else 0),
             "last_comment_at": last_comment_row["ts"] if last_comment_row else None,
             "top_commenters": [dict(r) for r in top_rows],
+            "latest_metric": latest_metric,
         }
 
     def get_dashboard_summary(self) -> dict:
@@ -363,11 +374,16 @@ class BotRepository:
         comments_row = self.db.fetchone("SELECT COUNT(*) AS c FROM comments", ())
         unique_row = self.db.fetchone("SELECT COUNT(DISTINCT user_id) AS c FROM comments", ())
         leads_row = self.db.fetchone("SELECT COUNT(*) AS c FROM leads", ())
+        metrics = self.get_latest_channel_metric_stats(limit_posts=50)
         return {
             "posts": int(posts_row["c"] if posts_row else 0),
             "comments": int(comments_row["c"] if comments_row else 0),
             "unique_commenters": int(unique_row["c"] if unique_row else 0),
             "leads": int(leads_row["c"] if leads_row else 0),
+            "views_total": metrics.total_views,
+            "reactions_total": metrics.total_reactions,
+            "forwards_total": metrics.total_forwards,
+            "posts_sampled": metrics.posts_sampled,
         }
 
     def get_comments_trend(self, days: int = 14) -> list[dict]:
@@ -402,5 +418,110 @@ class BotRepository:
             LIMIT ?
             """,
             (limit,),
+        )
+        return [dict(r) for r in rows]
+
+    def save_post_metrics_snapshots(self, rows: list[dict], snapshot_at: str) -> int:
+        inserted = 0
+        for row in rows:
+            self.db.execute(
+                """
+                INSERT INTO post_metrics_snapshots(
+                    message_id, post_date, snapshot_at, views, forwards, reactions_total, reactions_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(row["message_id"]),
+                    row.get("post_date"),
+                    snapshot_at,
+                    int(row.get("views", 0)),
+                    int(row.get("forwards", 0)),
+                    int(row.get("reactions_total", 0)),
+                    row.get("reactions_json", "{}"),
+                ),
+            )
+            inserted += 1
+        return inserted
+
+    def get_latest_channel_metric_stats(self, limit_posts: int = 50) -> ChannelMetricStats:
+        limit_posts = max(1, min(200, int(limit_posts)))
+        rows = self.db.fetchall(
+            """
+            SELECT m.message_id,
+                   m.views,
+                   m.forwards,
+                   m.reactions_total
+            FROM post_metrics_snapshots m
+            WHERE m.id = (
+                SELECT m2.id
+                FROM post_metrics_snapshots m2
+                WHERE m2.message_id = m.message_id
+                ORDER BY m2.snapshot_at DESC, m2.id DESC
+                LIMIT 1
+            )
+            ORDER BY m.message_id DESC
+            LIMIT ?
+            """,
+            (limit_posts,),
+        )
+
+        posts_sampled = len(rows)
+        total_views = sum(int(r["views"]) for r in rows)
+        total_forwards = sum(int(r["forwards"]) for r in rows)
+        total_reactions = sum(int(r["reactions_total"]) for r in rows)
+        avg_views = float(total_views / posts_sampled) if posts_sampled else 0.0
+        return ChannelMetricStats(
+            posts_sampled=posts_sampled,
+            total_views=total_views,
+            total_forwards=total_forwards,
+            total_reactions=total_reactions,
+            avg_views_per_post=avg_views,
+        )
+
+    def get_latest_post_metric(self, message_id: int) -> dict | None:
+        row = self.db.fetchone(
+            """
+            SELECT message_id, post_date, snapshot_at, views, forwards, reactions_total, reactions_json
+            FROM post_metrics_snapshots
+            WHERE message_id = ?
+            ORDER BY snapshot_at DESC, id DESC
+            LIMIT 1
+            """,
+            (message_id,),
+        )
+        if not row:
+            return None
+        item = dict(row)
+        try:
+            item["reactions"] = json.loads(item.get("reactions_json") or "{}")
+        except json.JSONDecodeError:
+            item["reactions"] = {}
+        return item
+
+    def get_channel_metric_trend(self, metric: str, days: int = 14) -> list[dict]:
+        metric_column = {
+            "views": "views",
+            "reactions": "reactions_total",
+            "forwards": "forwards",
+        }.get(metric)
+        if not metric_column:
+            raise ValueError("Unsupported metric")
+        days = max(1, min(365, int(days)))
+        rows = self.db.fetchall(
+            f"""
+            WITH points AS (
+                SELECT snapshot_at,
+                       SUM({metric_column}) AS total_value
+                FROM post_metrics_snapshots
+                GROUP BY snapshot_at
+            )
+            SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
+                   MAX(total_value) AS value
+            FROM points
+            WHERE snapshot_at >= datetime('now', ?)
+            GROUP BY day
+            ORDER BY day ASC
+            """,
+            (f"-{days} day",),
         )
         return [dict(r) for r in rows]

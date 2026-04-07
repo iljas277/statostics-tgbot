@@ -471,7 +471,7 @@ class BotRepository:
         total_views = sum(int(r["views"]) for r in rows)
         total_forwards = sum(int(r["forwards"]) for r in rows)
         total_reactions = sum(int(r["reactions_total"]) for r in rows)
-        avg_views = float(total_views / posts_sampled) if posts_sampled else 0.0
+        avg_views = total_views / posts_sampled if posts_sampled else 0.0
         return ChannelMetricStats(
             posts_sampled=posts_sampled,
             total_views=total_views,

@@ -122,8 +122,8 @@
         <article class="card"><div class="label">Комментариев</div><div class="value">{{ summary.comments }}</div></article>
         <article class="card"><div class="label">Уникальных комментаторов</div><div class="value">{{ summary.unique_commenters }}</div></article>
         <article class="card"><div class="label">Лидов</div><div class="value">{{ summary.leads }}</div></article>
-        <article class="card"><div class="label">Просмотры (MTProto)</div><div class="value">{{ summary.views_total }}</div></article>
-        <article class="card"><div class="label">Реакции (MTProto)</div><div class="value">{{ summary.reactions_total }}</div></article>
+        <article class="card"><div class="label">Просмотры (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.views_total }}{% else %}—{% endif %}</div></article>
+        <article class="card"><div class="label">Реакции (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.reactions_total }}{% else %}—{% endif %}</div></article>
       </section>
 
       <section class="panel">

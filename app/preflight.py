@@ -18,9 +18,12 @@ def run_local_tests() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
         check=False,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError("Startup tests failed")
+        output = (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or "")
+        raise RuntimeError(f"Startup tests failed\n{output}".strip())
 
 
 async def run_telegram_checks(settings: Settings) -> None:

@@ -68,7 +68,19 @@ WantedBy=multi-user.target
 sudo cp infra/systemd/bot-socks-tunnel.service /etc/systemd/system/bot-socks-tunnel.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now bot-socks-tunnel.service
+```
+
+`enable --now` в одной команде одновременно включает автозапуск и сразу стартует сервис.
+
+Проверка статуса после запуска:
+
+```bash
 sudo systemctl status bot-socks-tunnel.service
+```
+
+Онлайн-мониторинг логов (блокирует терминал до `Ctrl+C`):
+
+```bash
 journalctl -u bot-socks-tunnel.service -f
 ```
 

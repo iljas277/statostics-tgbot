@@ -58,12 +58,12 @@ Python-бот для администрирования Telegram-канала:
       - число уникальных комментаторов;
       - сколько лидов пришло из комментариев этого поста;
       - время последнего комментария;
-    - топ-5 комментаторов по этому посту.
-    - (если настроен MTProto) views, reactions, forwards и разбивка реакций.
+      - топ-5 комментаторов по этому посту.
+      - (если настроен MTProto) views, reactions, forwards и разбивка реакций.
 
 - `/chart [days]`
-    - Отправляет PNG-график тренда комментариев за выбранный период.
-    - Если `days` не указан, используется `CHART_DEFAULT_DAYS`.
+   - Отправляет PNG-график тренда комментариев за выбранный период.
+   - Если `days` не указан, используется `CHART_DEFAULT_DAYS`.
 
 - `/tgstats [posts_limit]`
    - Возвращает агрегаты Telegram API по последним постам:
@@ -202,9 +202,9 @@ Python-бот для администрирования Telegram-канала:
 4. Откройте:
    - `http://WEB_HOST:WEB_PORT/` - дашборд
    - `http://WEB_HOST:WEB_PORT/api/summary` - JSON-сводка
-    - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
-    - `http://WEB_HOST:WEB_PORT/chart/views.png?days=14` - график просмотров
-    - `http://WEB_HOST:WEB_PORT/chart/reactions.png?days=14` - график реакций
+   - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
+   - `http://WEB_HOST:WEB_PORT/chart/views.png?days=14` - график просмотров
+   - `http://WEB_HOST:WEB_PORT/chart/reactions.png?days=14` - график реакций
 
 ## Дальше (Phase 2)
 

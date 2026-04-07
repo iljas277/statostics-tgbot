@@ -65,7 +65,7 @@ WantedBy=multi-user.target
 Применение (копируем шаблон в `/etc/systemd/system/` и включаем сервис):
 
 ```bash
-sudo cp infra/systemd/bot-socks-tunnel.service /etc/systemd/system/bot-socks-tunnel.service
+sudo cp infra/systemd/bot-socks-tunnel.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now bot-socks-tunnel.service
 ```

@@ -39,7 +39,7 @@ ssh -N -D 127.0.0.1:1080 user@remote-server
 
 ```ini
 [Unit]
-Description=SSH SOCKS5 tunnel for statostics-tgbot
+Description=SSH SOCKS5 tunnel for statistics-tgbot
 After=network-online.target
 Wants=network-online.target
 

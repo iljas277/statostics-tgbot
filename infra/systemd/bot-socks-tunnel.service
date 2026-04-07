@@ -1,0 +1,14 @@
+[Unit]
+Description=SSH SOCKS5 tunnel for statostics-tgbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bot
+Environment="AUTOSSH_GATETIME=0"
+ExecStart=/usr/bin/autossh -M 0 -N -D 127.0.0.1:1080 user@remote-server -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

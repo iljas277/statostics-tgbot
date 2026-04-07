@@ -127,9 +127,9 @@ Python-бот для администрирования Telegram-канала:
    ssh -N -D 127.0.0.1:1080 user@remote-server
    ```
 2. Направляйте внешние запросы через `socks5://127.0.0.1:1080`.
-3. Для продакшена используйте `systemd`/`autossh`, чтобы туннель автоматически восстанавливался.
+3. Для продакшена установите `autossh` и используйте `systemd`, чтобы туннель автоматически восстанавливался.
 
-Пошаговый runbook и пример `systemd`-юнита: `infra/ssh-portforwarding.md`.
+Пошаговый runbook: `infra/ssh-portforwarding.md`, шаблон юнита: `infra/systemd/bot-socks-tunnel.service`.
 
 ## Если комментарии не считаются
 

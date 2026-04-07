@@ -2,7 +2,16 @@
 
 Этот документ фиксирует операционную настройку маршрута для будущих Telegram API/Telethon вызовов через SSH-туннель.
 
-## 1) Базовый запуск туннеля
+## 1) Установка autossh
+
+Debian/Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y autossh
+```
+
+## 2) Базовый запуск туннеля
 
 На хосте, где запущен бот:
 
@@ -13,7 +22,7 @@ ssh -N -D 127.0.0.1:1080 user@remote-server
 - `-D 127.0.0.1:1080` — локальный SOCKS5-прокси.
 - `-N` — не запускать удалённую команду, только туннель.
 
-## 2) Проверки на удалённой стороне
+## 3) Проверки на удалённой стороне
 
 На `remote-server`:
 
@@ -24,7 +33,7 @@ ssh -N -D 127.0.0.1:1080 user@remote-server
   ```
 - firewall не блокирует исходящие соединения к целевым сервисам.
 
-## 3) Автовосстановление через systemd + autossh
+## 4) Автовосстановление через systemd + autossh
 
 Пример юнита `/etc/systemd/system/bot-socks-tunnel.service`:
 
@@ -48,15 +57,19 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Применение:
+Готовый шаблон этого юнита в репозитории: `infra/systemd/bot-socks-tunnel.service`.
+
+Применение (копируем шаблон в `/etc/systemd/system/` и включаем сервис):
 
 ```bash
+sudo cp infra/systemd/bot-socks-tunnel.service /etc/systemd/system/bot-socks-tunnel.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now bot-socks-tunnel.service
 sudo systemctl status bot-socks-tunnel.service
+journalctl -u bot-socks-tunnel.service -f
 ```
 
-## 4) Проверка, что прокси работает
+## 5) Проверка, что прокси работает
 
 ```bash
 curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org
@@ -64,7 +77,7 @@ curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org
 
 Если команда возвращает IP удалённой стороны (или цепочки далее по маршруту), туннель работает.
 
-## 5) Как использовать позже в коде
+## 6) Как использовать позже в коде
 
 Для будущих интеграций Telegram API/Telethon используйте адрес прокси:
 

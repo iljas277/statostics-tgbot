@@ -501,29 +501,50 @@ class BotRepository:
         return item
 
     def get_channel_metric_trend(self, metric: str, days: int = 14) -> list[dict]:
-        metric_column = {
-            "views": "views",
-            "reactions": "reactions_total",
-            "forwards": "forwards",
-        }.get(metric)
-        if not metric_column:
+        trend_queries = {
+            "views": """
+                WITH points AS (
+                    SELECT snapshot_at, SUM(views) AS total_value
+                    FROM post_metrics_snapshots
+                    GROUP BY snapshot_at
+                )
+                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
+                       MAX(total_value) AS value
+                FROM points
+                WHERE snapshot_at >= datetime('now', ?)
+                GROUP BY day
+                ORDER BY day ASC
+            """,
+            "reactions": """
+                WITH points AS (
+                    SELECT snapshot_at, SUM(reactions_total) AS total_value
+                    FROM post_metrics_snapshots
+                    GROUP BY snapshot_at
+                )
+                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
+                       MAX(total_value) AS value
+                FROM points
+                WHERE snapshot_at >= datetime('now', ?)
+                GROUP BY day
+                ORDER BY day ASC
+            """,
+            "forwards": """
+                WITH points AS (
+                    SELECT snapshot_at, SUM(forwards) AS total_value
+                    FROM post_metrics_snapshots
+                    GROUP BY snapshot_at
+                )
+                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
+                       MAX(total_value) AS value
+                FROM points
+                WHERE snapshot_at >= datetime('now', ?)
+                GROUP BY day
+                ORDER BY day ASC
+            """,
+        }
+        query = trend_queries.get(metric)
+        if not query:
             raise ValueError("Unsupported metric")
         days = max(1, min(365, int(days)))
-        rows = self.db.fetchall(
-            f"""
-            WITH points AS (
-                SELECT snapshot_at,
-                       SUM({metric_column}) AS total_value
-                FROM post_metrics_snapshots
-                GROUP BY snapshot_at
-            )
-            SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
-                   MAX(total_value) AS value
-            FROM points
-            WHERE snapshot_at >= datetime('now', ?)
-            GROUP BY day
-            ORDER BY day ASC
-            """,
-            (f"-{days} day",),
-        )
+        rows = self.db.fetchall(query, (f"-{days} day",))
         return [dict(r) for r in rows]

@@ -148,7 +148,7 @@ Python-бот для администрирования Telegram-канала:
 ## Предстартовые тесты
 
 Перед запуском бота автоматически выполняются:
-- локальные unit-тесты (`python -m unittest discover -s tests -p "test_*.py`);
+- локальные unit-тесты (`python -m unittest discover -s tests -p "test_*.py"`);
 - проверка доступа бота к Telegram и каналу;
 - при включенном MTProto — пробный запрос метрик.
 

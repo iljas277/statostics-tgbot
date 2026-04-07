@@ -85,12 +85,25 @@ CREATE TABLE IF NOT EXISTS contacts_cache (
     PRIMARY KEY(rank_pos)
 );
 
+CREATE TABLE IF NOT EXISTS post_metrics_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    post_date TEXT,
+    snapshot_at TEXT NOT NULL,
+    views INTEGER NOT NULL DEFAULT 0,
+    forwards INTEGER NOT NULL DEFAULT 0,
+    reactions_total INTEGER NOT NULL DEFAULT 0,
+    reactions_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_comments_channel_post_id ON comments(channel_post_id);
 CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
 CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at);
 CREATE INDEX IF NOT EXISTS idx_users_last_activity ON users(last_activity);
 CREATE INDEX IF NOT EXISTS idx_bot_actions_created_at ON bot_actions(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_cache_user_id ON contacts_cache(user_id);
+CREATE INDEX IF NOT EXISTS idx_post_metrics_message_snapshot ON post_metrics_snapshots(message_id, snapshot_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_metrics_snapshot_at ON post_metrics_snapshots(snapshot_at DESC);
 """
 
 

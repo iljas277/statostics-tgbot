@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import fcntl
 import logging
 from pathlib import Path
@@ -9,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from telegram.error import Conflict
 from telegram.error import NetworkError
+from telegram.request import HTTPXRequest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from app.config import load_settings
@@ -27,10 +29,13 @@ from app.handlers import (
     cmd_post,
     cmd_start,
     cmd_stats,
+    cmd_refreshmetrics,
+    cmd_tgstats,
     on_linked_chat_message,
 )
-from app.jobs import refresh_contacts_cache_job, snapshot_job
+from app.jobs import refresh_contacts_cache_job, refresh_mtproto_metrics_job, snapshot_job
 from app.logging_setup import configure_logging
+from app.preflight import run_startup_tests
 from app.repositories import BotRepository
 
 LOGGER = logging.getLogger(__name__)
@@ -101,7 +106,23 @@ def build_app(settings: Settings) -> Application:
     db.init_schema()
     repo = BotRepository(db)
 
-    app = Application.builder().token(settings.bot_token).post_init(on_post_init).build()
+    request = HTTPXRequest(
+        proxy=settings.telegram_proxy_url,
+        httpx_kwargs={"trust_env": False},
+    )
+    get_updates_request = HTTPXRequest(
+        proxy=settings.telegram_proxy_url,
+        httpx_kwargs={"trust_env": False},
+    )
+
+    app_builder = (
+        Application.builder()
+        .token(settings.bot_token)
+        .request(request)
+        .get_updates_request(get_updates_request)
+        .post_init(on_post_init)
+    )
+    app = app_builder.build()
     app.bot_data["settings"] = settings
     app.bot_data["db"] = db
     app.bot_data["repo"] = repo
@@ -114,6 +135,8 @@ def build_app(settings: Settings) -> Application:
     app.add_handler(CommandHandler("delete", cmd_delete))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("chart", cmd_chart))
+    app.add_handler(CommandHandler("tgstats", cmd_tgstats))
+    app.add_handler(CommandHandler("refreshmetrics", cmd_refreshmetrics))
     app.add_handler(CommandHandler("poststats", cmd_poststats))
     app.add_handler(CommandHandler("contacts", cmd_contacts))
     app.add_handler(CommandHandler("refreshcontacts", cmd_refreshcontacts))
@@ -131,6 +154,7 @@ def build_app(settings: Settings) -> Application:
 
     if app.job_queue:
         app.job_queue.run_repeating(snapshot_job, interval=6 * 60 * 60, first=45)
+        app.job_queue.run_repeating(refresh_mtproto_metrics_job, interval=30 * 60, first=70)
         app.job_queue.run_daily(
             refresh_contacts_cache_job,
             time=time(
@@ -147,6 +171,11 @@ def build_app(settings: Settings) -> Application:
 def main() -> None:
     settings = load_settings()
     configure_logging(settings.log_level)
+    if settings.run_startup_tests:
+        run_startup_tests(settings=settings)
+        # run_startup_tests uses asyncio.run(), which closes the current loop.
+        # PTB expects an available loop when starting polling.
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     lock_path = settings.db_path.parent / "bot.lock"
     lock_file = acquire_single_instance_lock(lock_path)

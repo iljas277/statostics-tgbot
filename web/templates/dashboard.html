@@ -122,6 +122,8 @@
         <article class="card"><div class="label">Комментариев</div><div class="value">{{ summary.comments }}</div></article>
         <article class="card"><div class="label">Уникальных комментаторов</div><div class="value">{{ summary.unique_commenters }}</div></article>
         <article class="card"><div class="label">Лидов</div><div class="value">{{ summary.leads }}</div></article>
+        <article class="card"><div class="label">Просмотры (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.views_total }}{% else %}—{% endif %}</div></article>
+        <article class="card"><div class="label">Реакции (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.reactions_total }}{% else %}—{% endif %}</div></article>
       </section>
 
       <section class="panel">
@@ -132,6 +134,20 @@
           <span class="hint">Период в днях</span>
         </div>
         <img id="chart" class="chart" src="/chart/comments.png?days={{ default_days }}" alt="Comments trend chart" />
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <span class="pill">График просмотров</span>
+        </div>
+        <img id="views-chart" class="chart" src="/chart/views.png?days={{ default_days }}" alt="Views trend chart" />
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <span class="pill">График реакций</span>
+        </div>
+        <img id="reactions-chart" class="chart" src="/chart/reactions.png?days={{ default_days }}" alt="Reactions trend chart" />
       </section>
 
       <section class="panel">
@@ -167,7 +183,11 @@
       function reloadChart() {
         const days = document.getElementById('days').value || '14';
         const chart = document.getElementById('chart');
+        const viewsChart = document.getElementById('views-chart');
+        const reactionsChart = document.getElementById('reactions-chart');
         chart.src = `/chart/comments.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
+        viewsChart.src = `/chart/views.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
+        reactionsChart.src = `/chart/reactions.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
       }
     </script>
   </body>

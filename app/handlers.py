@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 from io import BytesIO
 
@@ -12,6 +13,7 @@ from telegram.ext import ContextTypes
 from app.repositories import BotRepository
 from app.services import analyze_comment
 from app.charts import render_comments_trend_png
+from app.telegram_api import TelegramApiMetricsService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -106,6 +108,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "- /stats [hours]\n"
         "- /poststats <message_id>\n"
         "- /chart [days]\n"
+        "- /tgstats [posts_limit]\n"
+        "- /refreshmetrics [posts_limit]\n"
         "- /contacts\n"
         "- /refreshcontacts\n\n"
         "Диагностика:\n"
@@ -113,6 +117,30 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "- /health"
     )
     await update.effective_message.reply_text(help_text)
+
+
+async def _refresh_mtproto_metrics(context: ContextTypes.DEFAULT_TYPE, posts_limit: int) -> int:
+    settings = context.application.bot_data["settings"]
+    repo: BotRepository = context.application.bot_data["repo"]
+    mtproto = TelegramApiMetricsService(settings=settings)
+
+    metrics = await mtproto.fetch_recent_post_metrics(limit=posts_limit)
+    if not metrics:
+        return 0
+
+    snapshot_at = datetime.now(tz=timezone.utc).isoformat()
+    rows = [
+        {
+            "message_id": m.message_id,
+            "post_date": m.post_date,
+            "views": m.views,
+            "forwards": m.forwards,
+            "reactions_total": m.reactions_total,
+            "reactions_json": m.reactions_json,
+        }
+        for m in metrics
+    ]
+    return repo.save_post_metrics_snapshots(rows=rows, snapshot_at=snapshot_at)
 
 
 async def cmd_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -217,6 +245,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
     stats = repo.aggregate_stats(period_hours=period_hours)
+    channel_metrics = repo.get_latest_channel_metric_stats(limit_posts=settings.mtproto_metrics_posts_limit)
     text = (
         f"Статистика за {period_hours} ч\n\n"
         f"- Постов: {stats.posts_count}\n"
@@ -224,7 +253,72 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"- Уникальных комментаторов: {stats.unique_commenters}\n"
         f"- Лидов: {stats.leads_count}\n"
         "\n"
-        "Views и реакции канала требуют MTProto (Phase 2)."
+        f"MTProto (последних {channel_metrics.posts_sampled} постов):\n"
+        f"- Просмотры (сумма): {channel_metrics.total_views}\n"
+        f"- Просмотры/пост (среднее): {channel_metrics.avg_views_per_post:.1f}\n"
+        f"- Реакции (сумма): {channel_metrics.total_reactions}\n"
+        f"- Репосты (сумма): {channel_metrics.total_forwards}\n"
+        "\n"
+        "Если MTProto не настроен или нет данных: /refreshmetrics"
+    )
+    await update.effective_message.reply_text(text)
+
+
+async def cmd_refreshmetrics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = context.application.bot_data["settings"]
+    if not await _require_admin(update, settings.admin_ids):
+        return
+
+    posts_limit = settings.mtproto_metrics_posts_limit
+    if context.args:
+        try:
+            posts_limit = max(1, min(200, int(context.args[0])))
+        except ValueError:
+            await update.effective_message.reply_text("Использование: /refreshmetrics [posts_limit]")
+            return
+
+    mtproto = TelegramApiMetricsService(settings=settings)
+    if not mtproto.enabled:
+        await update.effective_message.reply_text(
+            "MTProto не настроен. Укажите TELEGRAM_API_ID и TELEGRAM_API_HASH в .env"
+        )
+        return
+
+    count = await _refresh_mtproto_metrics(context=context, posts_limit=posts_limit)
+    await update.effective_message.reply_text(
+        "Метрики Telegram API обновлены\n"
+        f"- постов: {count}\n"
+        f"- окно: {posts_limit}"
+    )
+
+
+async def cmd_tgstats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = context.application.bot_data["settings"]
+    repo: BotRepository = context.application.bot_data["repo"]
+    if not await _require_admin(update, settings.admin_ids):
+        return
+
+    posts_limit = settings.mtproto_metrics_posts_limit
+    if context.args:
+        try:
+            posts_limit = max(1, min(200, int(context.args[0])))
+        except ValueError:
+            await update.effective_message.reply_text("Использование: /tgstats [posts_limit]")
+            return
+
+    channel_metrics = repo.get_latest_channel_metric_stats(limit_posts=posts_limit)
+    if channel_metrics.posts_sampled == 0:
+        await update.effective_message.reply_text(
+            "Нет данных MTProto. Выполните /refreshmetrics для загрузки просмотров и реакций."
+        )
+        return
+
+    text = (
+        f"Telegram API метрики (последних {channel_metrics.posts_sampled} постов)\n\n"
+        f"- Просмотры (сумма): {channel_metrics.total_views}\n"
+        f"- Просмотры/пост (среднее): {channel_metrics.avg_views_per_post:.1f}\n"
+        f"- Реакции (сумма): {channel_metrics.total_reactions}\n"
+        f"- Репосты (сумма): {channel_metrics.total_forwards}"
     )
     await update.effective_message.reply_text(text)
 
@@ -277,6 +371,19 @@ async def cmd_poststats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lines.append("Топ комментаторов:")
         for idx, row in enumerate(top, start=1):
             lines.append(f"  {idx}. {row['author']} ({row['comments_count']})")
+
+    metric = data.get("latest_metric")
+    if metric:
+        lines.append("")
+        lines.append("MTProto метрики:")
+        lines.append(f"- Views: {metric.get('views', 0)}")
+        lines.append(f"- Reactions: {metric.get('reactions_total', 0)}")
+        lines.append(f"- Forwards: {metric.get('forwards', 0)}")
+        reactions = metric.get("reactions", {}) or {}
+        if reactions:
+            lines.append("- Реакции по типам:")
+            for reaction, count in sorted(reactions.items(), key=lambda item: item[1], reverse=True):
+                lines.append(f"  {reaction}: {count}")
 
     await update.effective_message.reply_text("\n".join(lines))
 

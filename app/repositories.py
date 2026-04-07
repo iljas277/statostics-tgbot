@@ -194,6 +194,7 @@ class BotRepository:
         first_name: str | None,
         last_name: str | None,
     ) -> str:
+        """Resolve nickname: @username first, then full name, then numeric user_id."""
         username_clean = (username or "").strip()
         if username_clean:
             return f"@{username_clean}"

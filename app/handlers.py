@@ -78,6 +78,7 @@ async def _require_admin(update: Update, admin_ids: set[int]) -> bool:
 
 
 def _csv_bytes(rows: list[dict], headers: list[str]) -> bytes:
+    """Serialize rows into UTF-8 CSV bytes using provided headers and empty defaults."""
     buf = StringIO()
     writer = csv.DictWriter(buf, fieldnames=headers)
     writer.writeheader()
@@ -87,6 +88,7 @@ def _csv_bytes(rows: list[dict], headers: list[str]) -> bytes:
 
 
 def _now_suffix() -> str:
+    """Return UTC timestamp suffix for filenames in YYYYMMDD_HHMMSS format."""
     return datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 

@@ -66,6 +66,7 @@ NEGATIVE_REACTIONS = {"👎", "💩", "🤬", "😢", "😡", "🤯", "🤮", "�
 
 
 def _reaction_sentiment(reaction_key: str) -> str:
+    """Classify reaction key as positive/negative/neutral by predefined emoji sets."""
     if reaction_key in POSITIVE_REACTIONS:
         return "positive"
     if reaction_key in NEGATIVE_REACTIONS:

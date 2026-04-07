@@ -10,10 +10,12 @@ from matplotlib.ticker import FuncFormatter
 
 
 def _format_thousands(value: float, _pos: int) -> str:
+    """Format tick values with space-separated thousands for Y-axis labels."""
     return f"{int(value):,}".replace(",", " ")
 
 
 def _style_axis(ax, labels: list[str]) -> None:
+    """Apply shared axis styling, grid, tick formatting and X-label density handling."""
     ax.grid(axis="y", linestyle="--", alpha=0.28)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

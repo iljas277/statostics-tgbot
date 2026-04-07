@@ -16,6 +16,7 @@ from app.telegram_api import TelegramApiMetricsService
 
 
 def _csv_response(filename: str, rows: list[dict], headers: list[str]) -> Response:
+    """Build downloadable CSV response from dict rows with stable header ordering."""
     buf = StringIO()
     writer = csv.DictWriter(buf, fieldnames=headers)
     writer.writeheader()

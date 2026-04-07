@@ -78,6 +78,15 @@
         cursor: pointer;
         font-weight: 700;
       }
+      .btn-ghost {
+        background: #e8f2ff;
+        color: #0b5fb6;
+      }
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .hint { color: var(--muted); font-size: 13px; }
       .chart {
         width: 100%;
@@ -124,6 +133,7 @@
         <article class="card"><div class="label">Лидов</div><div class="value">{{ summary.leads }}</div></article>
         <article class="card"><div class="label">Просмотры (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.views_total }}{% else %}—{% endif %}</div></article>
         <article class="card"><div class="label">Реакции (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.reactions_total }}{% else %}—{% endif %}</div></article>
+        <article class="card"><div class="label">Репосты (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.forwards_total }}{% else %}—{% endif %}</div></article>
       </section>
 
       <section class="panel">
@@ -131,6 +141,12 @@
           <span class="pill">График комментариев</span>
           <input id="days" type="number" min="1" max="365" value="{{ default_days }}" />
           <button class="btn" onclick="reloadChart()">Обновить</button>
+          <div class="chips">
+            <button class="btn btn-ghost" onclick="setDays(7)">7д</button>
+            <button class="btn btn-ghost" onclick="setDays(14)">14д</button>
+            <button class="btn btn-ghost" onclick="setDays(30)">30д</button>
+            <button class="btn btn-ghost" onclick="setDays(90)">90д</button>
+          </div>
           <span class="hint">Период в днях</span>
         </div>
         <img id="chart" class="chart" src="/chart/comments.png?days={{ default_days }}" alt="Comments trend chart" />
@@ -148,6 +164,27 @@
           <span class="pill">График реакций</span>
         </div>
         <img id="reactions-chart" class="chart" src="/chart/reactions.png?days={{ default_days }}" alt="Reactions trend chart" />
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <span class="pill">График репостов</span>
+        </div>
+        <img id="forwards-chart" class="chart" src="/chart/forwards.png?days={{ default_days }}" alt="Forwards trend chart" />
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <span class="pill">API и экспорт</span>
+        </div>
+        <div class="hint">
+          JSON: <a href="/api/summary" target="_blank">/api/summary</a>,
+          <a href="/api/stats" target="_blank">/api/stats</a>,
+          <a href="/api/tgstats" target="_blank">/api/tgstats</a>,
+          <a href="/api/commenters/channel" target="_blank">/api/commenters/channel</a>
+          <br />
+          CSV: <a href="/api/export/commenters/channel.csv" target="_blank">комментаторы канала</a>
+        </div>
       </section>
 
       <section class="panel">
@@ -185,9 +222,16 @@
         const chart = document.getElementById('chart');
         const viewsChart = document.getElementById('views-chart');
         const reactionsChart = document.getElementById('reactions-chart');
+        const forwardsChart = document.getElementById('forwards-chart');
         chart.src = `/chart/comments.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
         viewsChart.src = `/chart/views.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
         reactionsChart.src = `/chart/reactions.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
+        forwardsChart.src = `/chart/forwards.png?days=${encodeURIComponent(days)}&t=${Date.now()}`;
+      }
+
+      function setDays(days) {
+        document.getElementById('days').value = String(days);
+        reloadChart();
       }
     </script>
   </body>

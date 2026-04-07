@@ -6,6 +6,28 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+
+
+def _format_thousands(value: float, _pos: int) -> str:
+    return f"{int(value):,}".replace(",", " ")
+
+
+def _style_axis(ax, labels: list[str]) -> None:
+    ax.grid(axis="y", linestyle="--", alpha=0.28)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_alpha(0.25)
+    ax.spines["bottom"].set_alpha(0.25)
+    ax.yaxis.set_major_formatter(FuncFormatter(_format_thousands))
+
+    if len(labels) > 12:
+        step = max(1, len(labels) // 8)
+        ticks = list(range(0, len(labels), step))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([labels[i] for i in ticks], rotation=25, ha="right")
+    else:
+        ax.tick_params(axis="x", rotation=25)
 
 
 def render_comments_trend_png(trend_rows: list[dict], days: int) -> bytes:
@@ -21,22 +43,12 @@ def render_comments_trend_png(trend_rows: list[dict], days: int) -> bytes:
     fig.patch.set_facecolor("#f7f9fc")
     ax.set_facecolor("#ffffff")
 
-    ax.plot(labels, values, color="#0b84f3", linewidth=2.5, marker="o", markersize=4)
-    ax.fill_between(labels, values, color="#d5e9ff", alpha=0.6)
+    ax.plot(labels, values, color="#0b84f3", linewidth=2.8, marker="o", markersize=4.5)
+    ax.fill_between(labels, values, color="#d5e9ff", alpha=0.5)
 
     ax.set_title(f"Comments Trend ({days} days)", fontsize=12, fontweight="bold")
     ax.set_ylabel("Comments")
-    ax.grid(axis="y", linestyle="--", alpha=0.35)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    if len(labels) > 12:
-        step = max(1, len(labels) // 8)
-        ticks = list(range(0, len(labels), step))
-        ax.set_xticks(ticks)
-        ax.set_xticklabels([labels[i] for i in ticks], rotation=25, ha="right")
-    else:
-        ax.tick_params(axis="x", rotation=25)
+    _style_axis(ax=ax, labels=labels)
 
     fig.tight_layout()
     buf = BytesIO()
@@ -66,22 +78,12 @@ def render_metric_trend_png(
     fig.patch.set_facecolor("#f7f9fc")
     ax.set_facecolor("#ffffff")
 
-    ax.plot(labels, values, color=line_color, linewidth=2.5, marker="o", markersize=4)
-    ax.fill_between(labels, values, color=fill_color, alpha=0.6)
+    ax.plot(labels, values, color=line_color, linewidth=2.8, marker="o", markersize=4.5)
+    ax.fill_between(labels, values, color=fill_color, alpha=0.5)
 
     ax.set_title(f"{title} ({days} days)", fontsize=12, fontweight="bold")
     ax.set_ylabel(y_label)
-    ax.grid(axis="y", linestyle="--", alpha=0.35)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    if len(labels) > 12:
-        step = max(1, len(labels) // 8)
-        ticks = list(range(0, len(labels), step))
-        ax.set_xticks(ticks)
-        ax.set_xticklabels([labels[i] for i in ticks], rotation=25, ha="right")
-    else:
-        ax.tick_params(axis="x", rotation=25)
+    _style_axis(ax=ax, labels=labels)
 
     fig.tight_layout()
     buf = BytesIO()

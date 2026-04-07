@@ -23,6 +23,9 @@ from app.handlers import (
     cmd_contacts,
     cmd_delete,
     cmd_edit,
+    cmd_export_commenters_csv,
+    cmd_export_post_commenters_csv,
+    cmd_export_post_reactors_csv,
     cmd_poststats,
     cmd_refreshcontacts,
     on_channel_post,
@@ -140,6 +143,9 @@ def build_app(settings: Settings) -> Application:
     app.add_handler(CommandHandler("poststats", cmd_poststats))
     app.add_handler(CommandHandler("contacts", cmd_contacts))
     app.add_handler(CommandHandler("refreshcontacts", cmd_refreshcontacts))
+    app.add_handler(CommandHandler("export_commenters_csv", cmd_export_commenters_csv))
+    app.add_handler(CommandHandler("export_post_commenters_csv", cmd_export_post_commenters_csv))
+    app.add_handler(CommandHandler("export_post_reactors_csv", cmd_export_post_reactors_csv))
     app.add_handler(CommandHandler("binddiscussion", cmd_binddiscussion))
     app.add_handler(CommandHandler("health", cmd_health))
     app.add_error_handler(on_error)

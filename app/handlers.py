@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
 from datetime import datetime, timezone
+from html import escape
 import logging
 from io import BytesIO
+from io import StringIO
 
 from telegram import Message, Update
 from telegram import InputFile
@@ -74,6 +77,19 @@ async def _require_admin(update: Update, admin_ids: set[int]) -> bool:
     return False
 
 
+def _csv_bytes(rows: list[dict], headers: list[str]) -> bytes:
+    buf = StringIO()
+    writer = csv.DictWriter(buf, fieldnames=headers)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({key: row.get(key, "") for key in headers})
+    return buf.getvalue().encode("utf-8")
+
+
+def _now_suffix() -> str:
+    return datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
 def _resolve_channel_post_id(message: Message, linked_chat_id: int, repo: BotRepository, channel_id: int) -> int | None:
     if message.message_thread_id:
         mapped = repo.get_channel_post_by_discussion_root(linked_chat_id, message.message_thread_id)
@@ -99,24 +115,27 @@ def _resolve_channel_post_id(message: Message, linked_chat_id: int, repo: BotRep
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text = (
-        "Панель управления ботом\n\n"
-        "Посты:\n"
+        "🚀 <b>Панель управления ботом</b>\n\n"
+        "📝 <b>Посты</b>:\n"
         "- /post <текст>\n"
         "- /edit <message_id> <новый текст>\n"
         "- /delete <message_id>\n\n"
-        "Аналитика:\n"
+        "📊 <b>Аналитика</b>:\n"
         "- /stats [hours]\n"
         "- /poststats <message_id>\n"
         "- /chart [days]\n"
         "- /tgstats [posts_limit]\n"
         "- /refreshmetrics [posts_limit]\n"
         "- /contacts\n"
-        "- /refreshcontacts\n\n"
-        "Диагностика:\n"
+        "- /refreshcontacts\n"
+        "- /export_commenters_csv [limit]\n"
+        "- /export_post_commenters_csv <message_id> [limit]\n"
+        "- /export_post_reactors_csv <message_id> [limit]\n\n"
+        "🩺 <b>Диагностика</b>:\n"
         "- /binddiscussion\n"
         "- /health"
     )
-    await update.effective_message.reply_text(help_text)
+    await update.effective_message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 
 async def _refresh_mtproto_metrics(context: ContextTypes.DEFAULT_TYPE, posts_limit: int) -> int:
@@ -247,21 +266,21 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stats = repo.aggregate_stats(period_hours=period_hours)
     channel_metrics = repo.get_latest_channel_metric_stats(limit_posts=settings.mtproto_metrics_posts_limit)
     text = (
-        f"Статистика за {period_hours} ч\n\n"
-        f"- Постов: {stats.posts_count}\n"
-        f"- Комментариев: {stats.comments_count}\n"
-        f"- Уникальных комментаторов: {stats.unique_commenters}\n"
-        f"- Лидов: {stats.leads_count}\n"
+        f"📊 <b>Статистика за {period_hours} ч</b>\n\n"
+        f"• Постов: <b>{stats.posts_count}</b>\n"
+        f"• Комментариев: <b>{stats.comments_count}</b>\n"
+        f"• Уникальных комментаторов: <b>{stats.unique_commenters}</b>\n"
+        f"• Лидов: <b>{stats.leads_count}</b>\n"
         "\n"
-        f"MTProto (последних {channel_metrics.posts_sampled} постов):\n"
-        f"- Просмотры (сумма): {channel_metrics.total_views}\n"
-        f"- Просмотры/пост (среднее): {channel_metrics.avg_views_per_post:.1f}\n"
-        f"- Реакции (сумма): {channel_metrics.total_reactions}\n"
-        f"- Репосты (сумма): {channel_metrics.total_forwards}\n"
+        f"📱 <b>MTProto</b> (последних {channel_metrics.posts_sampled} постов):\n"
+        f"• Просмотры (сумма): <b>{channel_metrics.total_views}</b>\n"
+        f"• Просмотры/пост (среднее): <b>{channel_metrics.avg_views_per_post:.1f}</b>\n"
+        f"• Реакции (сумма): <b>{channel_metrics.total_reactions}</b>\n"
+        f"• Репосты (сумма): <b>{channel_metrics.total_forwards}</b>\n"
         "\n"
-        "Если MTProto не настроен или нет данных: /refreshmetrics"
+        "ℹ️ Если MTProto не настроен или нет данных: /refreshmetrics"
     )
-    await update.effective_message.reply_text(text)
+    await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
 async def cmd_refreshmetrics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -322,13 +341,13 @@ async def cmd_tgstats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     text = (
-        f"Telegram API метрики (последних {channel_metrics.posts_sampled} постов)\n\n"
-        f"- Просмотры (сумма): {channel_metrics.total_views}\n"
-        f"- Просмотры/пост (среднее): {channel_metrics.avg_views_per_post:.1f}\n"
-        f"- Реакции (сумма): {channel_metrics.total_reactions}\n"
-        f"- Репосты (сумма): {channel_metrics.total_forwards}"
+        f"📱 <b>Telegram API метрики</b> (последних {channel_metrics.posts_sampled} постов)\n\n"
+        f"• Просмотры (сумма): <b>{channel_metrics.total_views}</b>\n"
+        f"• Просмотры/пост (среднее): <b>{channel_metrics.avg_views_per_post:.1f}</b>\n"
+        f"• Реакции (сумма): <b>{channel_metrics.total_reactions}</b>\n"
+        f"• Репосты (сумма): <b>{channel_metrics.total_forwards}</b>"
     )
-    await update.effective_message.reply_text(text)
+    await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
 async def cmd_poststats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -359,41 +378,42 @@ async def cmd_poststats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         preview = f"{preview[:100]}..."
     if not preview:
         preview = "<без текста>"
+    preview = escape(preview)
 
     lines = [
-        f"Аналитика поста {message_id}",
+        f"🧾 Аналитика поста <b>{message_id}</b>",
         "",
-        f"- Создан: {post.get('created_at')}",
-        f"- Обновлен: {post.get('updated_at') or '-'}",
-        f"- Удален: {post.get('deleted_at') or '-'}",
-        f"- Комментариев: {data['comments_count']}",
-        f"- Уникальных комментаторов: {data['unique_commenters']}",
-        f"- Лидов в комментариях: {data['leads_in_comments']}",
-        f"- Последний комментарий: {data['last_comment_at'] or '-'}",
-        f"- Текст: {preview}",
+        f"• Создан: {post.get('created_at')}",
+        f"• Обновлен: {post.get('updated_at') or '-'}",
+        f"• Удален: {post.get('deleted_at') or '-'}",
+        f"• Комментариев: <b>{data['comments_count']}</b>",
+        f"• Уникальных комментаторов: <b>{data['unique_commenters']}</b>",
+        f"• Лидов в комментариях: <b>{data['leads_in_comments']}</b>",
+        f"• Последний комментарий: {data['last_comment_at'] or '-'}",
+        f"• Текст: {preview}",
     ]
 
     top = data.get("top_commenters", [])
     if top:
         lines.append("")
-        lines.append("Топ комментаторов:")
+        lines.append("<b>Топ комментаторов:</b>")
         for idx, row in enumerate(top, start=1):
-            lines.append(f"  {idx}. {row['author']} ({row['comments_count']})")
+            lines.append(f"  {idx}. {escape(str(row['author']))} ({row['comments_count']})")
 
     metric = data.get("latest_metric")
     if metric:
         lines.append("")
-        lines.append("MTProto метрики:")
-        lines.append(f"- Views: {metric.get('views', 0)}")
-        lines.append(f"- Reactions: {metric.get('reactions_total', 0)}")
-        lines.append(f"- Forwards: {metric.get('forwards', 0)}")
+        lines.append("<b>MTProto метрики:</b>")
+        lines.append(f"• Views: <b>{metric.get('views', 0)}</b>")
+        lines.append(f"• Reactions: <b>{metric.get('reactions_total', 0)}</b>")
+        lines.append(f"• Forwards: <b>{metric.get('forwards', 0)}</b>")
         reactions = metric.get("reactions", {}) or {}
         if reactions:
-            lines.append("- Реакции по типам:")
+            lines.append("• Реакции по типам:")
             for reaction, count in sorted(reactions.items(), key=lambda item: item[1], reverse=True):
                 lines.append(f"  {reaction}: {count}")
 
-    await update.effective_message.reply_text("\n".join(lines))
+    await update.effective_message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
 async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -441,15 +461,16 @@ async def cmd_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     refreshed_at = contacts[0]["refreshed_at"]
     lines = [
-        "Контакты",
+        "👥 <b>Контакты</b>",
         f"Окно: последние {settings.contacts_posts_limit} постов",
         f"Лимит: {settings.contacts_commenters_limit}",
         f"Обновлено: {refreshed_at}",
         "",
     ]
     for c in contacts:
-        lines.append(f"{c['rank_pos']}. Ник: {c['nickname']}")
-        lines.append(f"   Профиль: {c['profile_url']}")
+        lines.append(f"{c['rank_pos']}. Ник: {escape(str(c['nickname']))}")
+        lines.append(f"   Комментариев: {c['comments_count']}")
+        lines.append(f"   Профиль: {escape(str(c['profile_url']))}")
 
     await update.effective_message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
@@ -470,6 +491,135 @@ async def cmd_refreshcontacts(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"- строк: {count}\n"
         f"- постов в окне: {settings.contacts_posts_limit}\n"
         f"- комментаторов в выдаче: {settings.contacts_commenters_limit}"
+    )
+
+
+async def cmd_export_commenters_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = context.application.bot_data["settings"]
+    repo: BotRepository = context.application.bot_data["repo"]
+    if not await _require_admin(update, settings.admin_ids):
+        return
+
+    limit = 5000
+    if context.args:
+        try:
+            limit = max(1, min(50000, int(context.args[0])))
+        except ValueError:
+            await update.effective_message.reply_text("Использование: /export_commenters_csv [limit]")
+            return
+
+    rows = repo.get_channel_unique_commenters(limit=limit)
+    if not rows:
+        await update.effective_message.reply_text("Пока нет данных по комментариям")
+        return
+
+    csv_rows = [{"nickname": row["nickname"], "comments_count": row["comments_count"]} for row in rows]
+    content = _csv_bytes(csv_rows, ["nickname", "comments_count"])
+    filename = f"channel_unique_commenters_{_now_suffix()}.csv"
+    await context.bot.send_document(
+        chat_id=update.effective_chat.id,
+        document=InputFile(BytesIO(content), filename=filename),
+        caption=f"Экспорт уникальных комментаторов канала: {len(csv_rows)} строк",
+    )
+
+
+async def cmd_export_post_commenters_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = context.application.bot_data["settings"]
+    repo: BotRepository = context.application.bot_data["repo"]
+    if not await _require_admin(update, settings.admin_ids):
+        return
+
+    if not context.args:
+        await update.effective_message.reply_text("Использование: /export_post_commenters_csv <message_id> [limit]")
+        return
+
+    try:
+        message_id = int(context.args[0])
+    except ValueError:
+        await update.effective_message.reply_text("message_id должен быть числом")
+        return
+
+    limit = 5000
+    if len(context.args) > 1:
+        try:
+            limit = max(1, min(50000, int(context.args[1])))
+        except ValueError:
+            await update.effective_message.reply_text("limit должен быть числом")
+            return
+
+    rows = repo.get_post_commenters(message_id=message_id, limit=limit)
+    if not rows:
+        await update.effective_message.reply_text("Для этого поста нет комментариев в БД")
+        return
+
+    csv_rows = [{"nickname": row["nickname"], "comments_count": row["comments_count"]} for row in rows]
+    content = _csv_bytes(csv_rows, ["nickname", "comments_count"])
+    filename = f"post_{message_id}_commenters_{_now_suffix()}.csv"
+    await context.bot.send_document(
+        chat_id=update.effective_chat.id,
+        document=InputFile(BytesIO(content), filename=filename),
+        caption=f"Экспорт комментаторов поста {message_id}: {len(csv_rows)} строк",
+    )
+
+
+async def cmd_export_post_reactors_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = context.application.bot_data["settings"]
+    if not await _require_admin(update, settings.admin_ids):
+        return
+
+    if not context.args:
+        await update.effective_message.reply_text("Использование: /export_post_reactors_csv <message_id> [limit]")
+        return
+
+    try:
+        message_id = int(context.args[0])
+    except ValueError:
+        await update.effective_message.reply_text("message_id должен быть числом")
+        return
+
+    limit = 2000
+    if len(context.args) > 1:
+        try:
+            limit = max(1, min(10000, int(context.args[1])))
+        except ValueError:
+            await update.effective_message.reply_text("limit должен быть числом")
+            return
+
+    mtproto = TelegramApiMetricsService(settings=settings)
+    if not mtproto.enabled:
+        await update.effective_message.reply_text(
+            "MTProto не настроен. Укажите TELEGRAM_API_ID и TELEGRAM_API_HASH в .env"
+        )
+        return
+
+    try:
+        reactors = await mtproto.fetch_post_reactors(message_id=message_id, limit=limit)
+    except Exception as exc:
+        LOGGER.warning("Post reactors export failed: %s", exc)
+        await update.effective_message.reply_text(
+            "Не удалось получить список реакций. Проверьте MTProto-сессию и права доступа."
+        )
+        return
+
+    if not reactors:
+        await update.effective_message.reply_text("Для этого поста не найдено реакций")
+        return
+
+    csv_rows = [
+        {
+            "nickname": r.nickname,
+            "reactions_count": r.reactions_count,
+            "positive_count": r.positive_count,
+            "negative_count": r.negative_count,
+        }
+        for r in reactors
+    ]
+    content = _csv_bytes(csv_rows, ["nickname", "reactions_count", "positive_count", "negative_count"])
+    filename = f"post_{message_id}_reactors_{_now_suffix()}.csv"
+    await context.bot.send_document(
+        chat_id=update.effective_chat.id,
+        document=InputFile(BytesIO(content), filename=filename),
+        caption=f"Экспорт реакций поста {message_id}: {len(csv_rows)} строк",
     )
 
 

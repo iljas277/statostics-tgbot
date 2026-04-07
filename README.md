@@ -19,8 +19,11 @@ Python-бот для администрирования Telegram-канала:
     - `/poststats <message_id>`
    - `/contacts [limit]`
    - `/refreshcontacts`
-   - `/binddiscussion`
-   - `/health`
+   - `/export_commenters_csv [limit]`
+   - `/export_post_commenters_csv <message_id> [limit]`
+   - `/export_post_reactors_csv <message_id> [limit]`
+    - `/binddiscussion`
+    - `/health`
 - База SQLite с таблицами постов, комментариев, лидов и логов действий.
 - Периодическая задача: снапшот статистики каждые 6 часов.
 
@@ -82,7 +85,22 @@ Python-бот для администрирования Telegram-канала:
    - Берет данные из кеш-таблицы `contacts_cache`.
 
 - `/refreshcontacts`
-   - Принудительно пересобирает кеш списка контактов прямо сейчас.
+    - Принудительно пересобирает кеш списка контактов прямо сейчас.
+
+- `/export_commenters_csv [limit]`
+   - Выгружает CSV всех уникальных комментаторов канала.
+   - Формат: `nickname,comments_count`.
+   - Сортировка: по количеству комментариев (убывание).
+
+- `/export_post_commenters_csv <message_id> [limit]`
+   - Выгружает CSV всех комментаторов указанного поста.
+   - Формат: `nickname,comments_count`.
+   - Сортировка: по количеству комментариев (убывание).
+
+- `/export_post_reactors_csv <message_id> [limit]`
+   - Выгружает CSV пользователей, оставивших реакции на указанный пост (MTProto).
+   - Формат: `nickname,reactions_count,positive_count,negative_count`.
+   - `positive/negative` считаются эвристически по набору emoji.
 
 - `/binddiscussion`
    - Привязывает текущую группу как discussion-chat в runtime.
@@ -214,11 +232,22 @@ Python-бот для администрирования Telegram-канала:
    python run_web.py
    ```
 4. Откройте:
-   - `http://WEB_HOST:WEB_PORT/` - дашборд
-   - `http://WEB_HOST:WEB_PORT/api/summary` - JSON-сводка
-   - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
-   - `http://WEB_HOST:WEB_PORT/chart/views.png?days=14` - график просмотров
-   - `http://WEB_HOST:WEB_PORT/chart/reactions.png?days=14` - график реакций
+    - `http://WEB_HOST:WEB_PORT/` - дашборд
+    - `http://WEB_HOST:WEB_PORT/api/summary` - JSON-сводка
+    - `http://WEB_HOST:WEB_PORT/api/stats?hours=24` - JSON-статистика за период
+    - `http://WEB_HOST:WEB_PORT/api/tgstats?posts_limit=50` - JSON-агрегаты MTProto
+    - `http://WEB_HOST:WEB_PORT/api/poststats/<message_id>` - JSON аналитика поста
+    - `http://WEB_HOST:WEB_PORT/api/contacts` - JSON контакты из кеша
+    - `http://WEB_HOST:WEB_PORT/api/commenters/channel` - JSON уникальные комментаторы канала
+    - `http://WEB_HOST:WEB_PORT/api/commenters/post/<message_id>` - JSON комментаторы поста
+    - `http://WEB_HOST:WEB_PORT/api/reactors/post/<message_id>` - JSON реакторы поста (MTProto)
+    - `http://WEB_HOST:WEB_PORT/api/export/commenters/channel.csv` - CSV уникальные комментаторы канала
+    - `http://WEB_HOST:WEB_PORT/api/export/commenters/post/<message_id>.csv` - CSV комментаторы поста
+    - `http://WEB_HOST:WEB_PORT/api/export/reactors/post/<message_id>.csv` - CSV реакторы поста (MTProto)
+    - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
+    - `http://WEB_HOST:WEB_PORT/chart/views.png?days=14` - график просмотров
+    - `http://WEB_HOST:WEB_PORT/chart/reactions.png?days=14` - график реакций
+    - `http://WEB_HOST:WEB_PORT/chart/forwards.png?days=14` - график репостов
 
 ## Дальше (Phase 2)
 

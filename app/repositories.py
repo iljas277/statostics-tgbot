@@ -187,6 +187,21 @@ class BotRepository:
             return f"tg://user?id={user_id}"
         return "недоступно"
 
+    @staticmethod
+    def _display_nickname(
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> str:
+        username_clean = (username or "").strip()
+        if username_clean:
+            return f"@{username_clean}"
+        full_name = " ".join(part.strip() for part in [first_name or "", last_name or ""] if part and part.strip())
+        if full_name:
+            return full_name
+        return str(user_id)
+
     def rebuild_contacts_cache(self, posts_limit: int, commenters_limit: int) -> int:
         rows = self.db.fetchall(
             """
@@ -243,6 +258,87 @@ class BotRepository:
             (),
         )
         return [dict(r) for r in rows]
+
+    def get_channel_unique_commenters(self, limit: int = 5000) -> list[dict]:
+        limit = max(1, min(50000, int(limit)))
+        rows = self.db.fetchall(
+            """
+            SELECT c.user_id,
+                   COUNT(*) AS comments_count,
+                   COALESCE(u.username, '') AS username,
+                   COALESCE(u.first_name, '') AS first_name,
+                   COALESCE(u.last_name, '') AS last_name
+            FROM comments c
+            LEFT JOIN users u ON u.user_id = c.user_id
+            GROUP BY c.user_id
+            ORDER BY comments_count DESC, COALESCE(u.last_activity, MAX(c.created_at)) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        result: list[dict] = []
+        for row in rows:
+            user_id = int(row["user_id"])
+            username = (row["username"] or "").strip() or None
+            first_name = (row["first_name"] or "").strip() or None
+            last_name = (row["last_name"] or "").strip() or None
+            nickname = self._display_nickname(
+                user_id=user_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            result.append(
+                {
+                    "user_id": user_id,
+                    "nickname": nickname,
+                    "username": username,
+                    "profile_url": self._profile_url_for_user(user_id=user_id, username=username),
+                    "comments_count": int(row["comments_count"]),
+                }
+            )
+        return result
+
+    def get_post_commenters(self, message_id: int, limit: int = 5000) -> list[dict]:
+        limit = max(1, min(50000, int(limit)))
+        rows = self.db.fetchall(
+            """
+            SELECT c.user_id,
+                   COUNT(*) AS comments_count,
+                   COALESCE(u.username, '') AS username,
+                   COALESCE(u.first_name, '') AS first_name,
+                   COALESCE(u.last_name, '') AS last_name
+            FROM comments c
+            LEFT JOIN users u ON u.user_id = c.user_id
+            WHERE c.channel_post_id = ?
+            GROUP BY c.user_id
+            ORDER BY comments_count DESC, COALESCE(u.last_activity, MAX(c.created_at)) DESC
+            LIMIT ?
+            """,
+            (message_id, limit),
+        )
+        result: list[dict] = []
+        for row in rows:
+            user_id = int(row["user_id"])
+            username = (row["username"] or "").strip() or None
+            first_name = (row["first_name"] or "").strip() or None
+            last_name = (row["last_name"] or "").strip() or None
+            nickname = self._display_nickname(
+                user_id=user_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            result.append(
+                {
+                    "user_id": user_id,
+                    "nickname": nickname,
+                    "username": username,
+                    "profile_url": self._profile_url_for_user(user_id=user_id, username=username),
+                    "comments_count": int(row["comments_count"]),
+                }
+            )
+        return result
 
     def aggregate_stats(self, period_hours: int = 24) -> AggregateStats:
         since = datetime.now(tz=timezone.utc) - timedelta(hours=period_hours)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import fcntl
 import logging
 from pathlib import Path
@@ -9,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from telegram.error import Conflict
 from telegram.error import NetworkError
+from telegram.request import HTTPXRequest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from app.config import load_settings
@@ -104,7 +106,23 @@ def build_app(settings: Settings) -> Application:
     db.init_schema()
     repo = BotRepository(db)
 
-    app = Application.builder().token(settings.bot_token).post_init(on_post_init).build()
+    request = HTTPXRequest(
+        proxy=settings.telegram_proxy_url,
+        httpx_kwargs={"trust_env": False},
+    )
+    get_updates_request = HTTPXRequest(
+        proxy=settings.telegram_proxy_url,
+        httpx_kwargs={"trust_env": False},
+    )
+
+    app_builder = (
+        Application.builder()
+        .token(settings.bot_token)
+        .request(request)
+        .get_updates_request(get_updates_request)
+        .post_init(on_post_init)
+    )
+    app = app_builder.build()
     app.bot_data["settings"] = settings
     app.bot_data["db"] = db
     app.bot_data["repo"] = repo
@@ -155,6 +173,9 @@ def main() -> None:
     configure_logging(settings.log_level)
     if settings.run_startup_tests:
         run_startup_tests(settings=settings)
+        # run_startup_tests uses asyncio.run(), which closes the current loop.
+        # PTB expects an available loop when starting polling.
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     lock_path = settings.db_path.parent / "bot.lock"
     lock_file = acquire_single_instance_lock(lock_path)

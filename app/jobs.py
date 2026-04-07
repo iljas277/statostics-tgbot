@@ -44,7 +44,12 @@ async def refresh_mtproto_metrics_job(context: ContextTypes.DEFAULT_TYPE) -> Non
     service = TelegramApiMetricsService(settings=settings)
     if not service.enabled:
         return
-    metrics = await service.fetch_recent_post_metrics(limit=settings.mtproto_metrics_posts_limit)
+    try:
+        metrics = await service.fetch_recent_post_metrics(limit=settings.mtproto_metrics_posts_limit)
+    except Exception as exc:
+        LOGGER.warning("MTProto metrics refresh skipped: %s", exc)
+        return
+
     if not metrics:
         return
     snapshot_at = datetime.now(tz=timezone.utc).isoformat()

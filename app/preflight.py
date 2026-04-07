@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 import subprocess
 import sys
 
 from telegram import Bot
+from telegram.request import HTTPXRequest
 
 from app.config import Settings
 from app.telegram_api import TelegramApiMetricsService
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def run_local_tests() -> None:
@@ -27,7 +32,19 @@ def run_local_tests() -> None:
 
 
 async def run_telegram_checks(settings: Settings) -> None:
-    bot = Bot(token=settings.bot_token)
+    request = HTTPXRequest(
+        proxy=settings.telegram_proxy_url,
+        httpx_kwargs={"trust_env": False},
+    )
+    get_updates_request = HTTPXRequest(
+        proxy=settings.telegram_proxy_url,
+        httpx_kwargs={"trust_env": False},
+    )
+    bot = Bot(
+        token=settings.bot_token,
+        request=request,
+        get_updates_request=get_updates_request,
+    )
     await bot.initialize()
     try:
         await bot.get_me()
@@ -37,7 +54,13 @@ async def run_telegram_checks(settings: Settings) -> None:
 
     mtproto = TelegramApiMetricsService(settings=settings)
     if mtproto.enabled:
-        await mtproto.fetch_recent_post_metrics(limit=1)
+        try:
+            await mtproto.fetch_recent_post_metrics(limit=1)
+        except Exception as exc:
+            LOGGER.warning(
+                "MTProto startup check failed (%s). Bot API polling will continue.",
+                exc,
+            )
 
 
 def run_startup_tests(settings: Settings) -> None:

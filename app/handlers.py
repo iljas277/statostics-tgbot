@@ -284,7 +284,15 @@ async def cmd_refreshmetrics(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-    count = await _refresh_mtproto_metrics(context=context, posts_limit=posts_limit)
+    try:
+        count = await _refresh_mtproto_metrics(context=context, posts_limit=posts_limit)
+    except Exception as exc:
+        LOGGER.warning("MTProto refresh failed: %s", exc)
+        await update.effective_message.reply_text(
+            "MTProto обновление не выполнено. Проверьте, что Telethon-сессия авторизована как пользователь, не как бот."
+        )
+        return
+
     await update.effective_message.reply_text(
         "Метрики Telegram API обновлены\n"
         f"- постов: {count}\n"

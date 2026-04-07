@@ -154,6 +154,20 @@ Python-бот для администрирования Telegram-канала:
 
 Отключение: `RUN_STARTUP_TESTS=false`.
 
+## Если MTProto пишет про bot users restricted
+
+Ошибка вида `BotMethodInvalidError: ... cannot be executed as a bot` означает, что файл `TELEGRAM_API_SESSION` авторизован как бот, а не как пользователь.
+
+Сделайте переавторизацию Telethon-сессии:
+
+1. Остановите бота.
+2. Удалите старую сессию:
+   - `rm -f data/telethon.session data/telethon.session-journal`
+3. Запустите login-flow:
+   - `python scripts/telethon_login_user.py`
+4. Введите номер телефона, код из Telegram и при необходимости 2FA-пароль.
+5. Запустите бота снова и выполните `/refreshmetrics`.
+
 ## Если комментарии не считаются
 
 1. Запустите `/health` в личке с ботом и проверьте:

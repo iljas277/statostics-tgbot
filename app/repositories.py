@@ -447,19 +447,21 @@ class BotRepository:
         limit_posts = max(1, min(200, int(limit_posts)))
         rows = self.db.fetchall(
             """
-            SELECT m.message_id,
-                   m.views,
-                   m.forwards,
-                   m.reactions_total
-            FROM post_metrics_snapshots m
-            WHERE m.id = (
-                SELECT m2.id
-                FROM post_metrics_snapshots m2
-                WHERE m2.message_id = m.message_id
-                ORDER BY m2.snapshot_at DESC, m2.id DESC
-                LIMIT 1
+            WITH latest AS (
+                SELECT message_id,
+                       views,
+                       forwards,
+                       reactions_total,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY message_id
+                           ORDER BY snapshot_at DESC, id DESC
+                       ) AS rn
+                FROM post_metrics_snapshots
             )
-            ORDER BY m.message_id DESC
+            SELECT message_id, views, forwards, reactions_total
+            FROM latest
+            WHERE rn = 1
+            ORDER BY message_id DESC
             LIMIT ?
             """,
             (limit_posts,),

@@ -253,7 +253,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"- Уникальных комментаторов: {stats.unique_commenters}\n"
         f"- Лидов: {stats.leads_count}\n"
         "\n"
-        f"MTProto (последние {channel_metrics.posts_sampled} постов):\n"
+        f"MTProto (последних {channel_metrics.posts_sampled} постов):\n"
         f"- Просмотры (сумма): {channel_metrics.total_views}\n"
         f"- Просмотры/пост (среднее): {channel_metrics.avg_views_per_post:.1f}\n"
         f"- Реакции (сумма): {channel_metrics.total_reactions}\n"
@@ -314,7 +314,7 @@ async def cmd_tgstats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     text = (
-        f"Telegram API метрики (последние {channel_metrics.posts_sampled} постов)\n\n"
+        f"Telegram API метрики (последних {channel_metrics.posts_sampled} постов)\n\n"
         f"- Просмотры (сумма): {channel_metrics.total_views}\n"
         f"- Просмотры/пост (среднее): {channel_metrics.avg_views_per_post:.1f}\n"
         f"- Реакции (сумма): {channel_metrics.total_reactions}\n"

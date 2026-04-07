@@ -44,8 +44,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+# Replace with an existing Linux user that owns valid SSH keys for remote-server.
 User=bot
 Environment="AUTOSSH_GATETIME=0"
+# Replace user@remote-server with your real SSH user and host.
 ExecStart=/usr/bin/autossh -M 0 -N -D 127.0.0.1:1080 user@remote-server \
   -o ServerAliveInterval=30 \
   -o ServerAliveCountMax=3 \

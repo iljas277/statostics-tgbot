@@ -74,8 +74,8 @@ def load_settings() -> Settings:
 
     db_path = Path(os.getenv("DB_PATH", "data/bot.sqlite3"))
 
-    contacts_posts_limit = max(1, int(os.getenv("CONTACTS_POSTS_LIMIT", "30")))
-    contacts_commenters_limit = max(1, int(os.getenv("CONTACTS_COMMENTERS_LIMIT", "20")))
+    contacts_posts_limit = max(1, int(os.getenv("CONTACTS_POSTS_LIMIT", "14")))
+    contacts_commenters_limit = max(1, int(os.getenv("CONTACTS_COMMENTERS_LIMIT", "10")))
     contacts_refresh_hour = max(0, min(23, int(os.getenv("CONTACTS_REFRESH_HOUR", "9"))))
     contacts_refresh_minute = max(0, min(59, int(os.getenv("CONTACTS_REFRESH_MINUTE", "0"))))
     web_host = os.getenv("WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"

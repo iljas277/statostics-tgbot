@@ -130,8 +130,7 @@
         <article class="card"><div class="label">Постов</div><div class="value">{{ summary.posts }}</div></article>
         <article class="card"><div class="label">Комментариев</div><div class="value">{{ summary.comments }}</div></article>
         <article class="card"><div class="label">Уникальных комментаторов</div><div class="value">{{ summary.unique_commenters }}</div></article>
-        <article class="card"><div class="label">Лидов</div><div class="value">{{ summary.leads }}</div></article>
-        <article class="card"><div class="label">Просмотры (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.views_total }}{% else %}—{% endif %}</div></article>
+        <article class="card"><div class="label">Средние уникальные просмотры/пост</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.views_total }}{% else %}—{% endif %}</div></article>
         <article class="card"><div class="label">Реакции (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.reactions_total }}{% else %}—{% endif %}</div></article>
         <article class="card"><div class="label">Репосты (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.forwards_total }}{% else %}—{% endif %}</div></article>
       </section>
@@ -154,9 +153,9 @@
 
       <section class="panel">
         <div class="toolbar">
-          <span class="pill">График просмотров</span>
+          <span class="pill">График уникальных просмотров</span>
         </div>
-        <img id="views-chart" class="chart" src="/chart/views.png?days={{ default_days }}" alt="Views trend chart" />
+        <img id="views-chart" class="chart" src="/chart/views.png?days={{ default_days }}" alt="Unique views trend chart" />
       </section>
 
       <section class="panel">
@@ -177,13 +176,27 @@
         <div class="toolbar">
           <span class="pill">API и экспорт</span>
         </div>
+        {% set sample_post_id = top_posts[0].message_id if top_posts else 1 %}
         <div class="hint">
+          Docs: <a href="/app/docs" target="_blank">/app/docs</a>
+          <br />
           JSON: <a href="/api/summary" target="_blank">/api/summary</a>,
           <a href="/api/stats" target="_blank">/api/stats</a>,
           <a href="/api/tgstats" target="_blank">/api/tgstats</a>,
-          <a href="/api/commenters/channel" target="_blank">/api/commenters/channel</a>
+          <a href="/api/top-posts" target="_blank">/api/top-posts</a>,
+          <a href="/api/contacts" target="_blank">/api/contacts</a>,
+          <a href="/api/commenters/channel" target="_blank">/api/commenters/channel</a>,
+          <a href="/api/user-metrics" target="_blank">/api/user-metrics</a>,
+          <a href="/api/poststats/{{ sample_post_id }}" target="_blank">/api/poststats/{message_id}</a>,
+          <a href="/api/commenters/post/{{ sample_post_id }}" target="_blank">/api/commenters/post/{message_id}</a>,
+          <a href="/api/reactions/post/{{ sample_post_id }}" target="_blank">/api/reactions/post/{message_id}</a>,
+          <a href="/api/reactors/post/{{ sample_post_id }}" target="_blank">/api/reactors/post/{message_id}</a>
           <br />
-          CSV: <a href="/api/export/commenters/channel.csv" target="_blank">комментаторы канала</a>
+          CSV: <a href="/api/export/commenters/channel.csv" target="_blank">комментаторы канала</a>,
+          <a href="/api/export/user-metrics.csv" target="_blank">метрики пользователей</a>,
+          <a href="/api/export/commenters/post/{{ sample_post_id }}.csv" target="_blank">комментаторы поста</a>,
+          <a href="/api/export/reactions/post/{{ sample_post_id }}.csv" target="_blank">реакции поста</a>,
+          <a href="/api/export/reactors/post/{{ sample_post_id }}.csv" target="_blank">реакторы поста</a>
         </div>
       </section>
 

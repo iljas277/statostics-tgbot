@@ -20,15 +20,30 @@ def run_local_tests() -> None:
     tests_dir = Path("tests")
     if not tests_dir.exists():
         return
+
+    LOGGER.info("Startup tests: running pytest...")
+
     result = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+        [sys.executable, "-m", "pytest", "-q", "tests"],
         check=False,
         capture_output=True,
         text=True,
     )
+
+    # Pytest exit code 5 means no tests were collected.
+    if result.returncode == 5:
+        LOGGER.warning("Startup tests skipped: no tests were collected")
+        return
+
     if result.returncode != 0:
         output = (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or "")
         raise RuntimeError(f"Startup tests failed\n{output}".strip())
+
+    summary = (result.stdout or "").strip()
+    if summary:
+        LOGGER.info("Startup tests passed:\n%s", summary)
+    else:
+        LOGGER.info("Startup tests passed")
 
 
 async def run_telegram_checks(settings: Settings) -> None:

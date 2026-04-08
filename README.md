@@ -1,256 +1,190 @@
-# Telegram Channel Admin Bot (MVP)
+# Telegram Channel Admin Bot
 
-Python-бот для администрирования Telegram-канала:
-- публикация, редактирование, удаление постов;
-- сбор комментариев из discussion group;
-- поиск активных комментаторов как потенциальных лидов;
-- статистика по постам/комментариям и снапшоты в SQLite.
+Python-бот и FastAPI-панель для аналитики Telegram-канала и discussion-группы.
 
-## Что входит в MVP
+## Возможности
 
-- Команды:
-  - `/post <text>`
-  - `/edit <message_id> <new_text>`
-  - `/delete <message_id>`
-  - `/stats [hours]`
-   - `/chart [days]`
-   - `/tgstats [posts_limit]`
-   - `/refreshmetrics [posts_limit]`
-    - `/poststats <message_id>`
-   - `/contacts [limit]`
-   - `/refreshcontacts`
-   - `/export_commenters_csv [limit]`
-   - `/export_post_commenters_csv <message_id> [limit]`
-   - `/export_post_reactors_csv <message_id> [limit]`
-    - `/binddiscussion`
-    - `/health`
-- База SQLite с таблицами постов, комментариев, лидов и логов действий.
-- Периодическая задача: снапшот статистики каждые 6 часов.
+- Сбор комментариев из discussion group и сохранение в SQLite.
+- Аналитика по постам и пользователям.
+- Экспорт CSV:
+  - уникальные комментаторы,
+  - комментаторы конкретного поста,
+  - агрегированные реакции поста,
+  - полный user-metrics отчет.
+- Web API + Dashboard + PNG-графики.
+- MTProto-метрики по постам (views/reactions/forwards) через Telethon.
 
-## Как работает каждая ручка
+## Команды бота
 
-- `/start`
-   - Показывает список доступных команд и короткую справку.
+- `/start` - стартовая справка.
+- `/help` - список команд.
+- `/stats [hours]` - сводка за период.
+- `/poststats <message_id>` - аналитика конкретного поста.
+- `/chart [days]` - график комментариев.
+- `/refreshmetrics [posts_limit]` - обновление MTProto-снапшотов.
+- `/contacts` - кешированный список активных комментаторов.
+- `/refreshcontacts` - пересборка кеша контактов.
+- `/export_user_metrics_csv [limit]` - CSV по пользователям и их метрикам.
+- `/export_commenters_csv [limit]` - CSV уникальных комментаторов канала.
+- `/export_post_commenters_csv <message_id> [limit]` - CSV комментаторов поста.
+- `/export_post_reactions_csv <message_id>` - CSV агрегированных реакций поста.
+- `/binddiscussion` - привязка discussion-чата в runtime.
 
-- `/post <text>`
-   - Публикует новый пост в канале `CHANNEL_ID`.
-   - Сохраняет `message_id`, текст и время в таблицу `posts`.
-   - Логирует действие администратора в `bot_actions`.
+Удалены как bot-команды:
 
-- `/edit <message_id> <new_text>`
-   - Редактирует текст существующего поста в канале.
-   - Обновляет запись в `posts` и фиксирует время изменения.
-   - Логирует действие в `bot_actions`.
-
-- `/delete <message_id>`
-   - Удаляет пост из канала.
-   - Ставит отметку удаления в БД (`deleted_at`).
-   - Логирует действие в `bot_actions`.
-
-- `/stats [hours]`
-   - Возвращает агрегированную статистику за период (по умолчанию 24 часа):
-      - количество постов;
-      - количество комментариев;
-      - число уникальных комментаторов;
-      - количество лидов.
-
-- `/poststats <message_id>`
-   - Возвращает аналитику по конкретному посту:
-      - создан/обновлен/удален;
-      - общее число комментариев;
-      - число уникальных комментаторов;
-      - сколько лидов пришло из комментариев этого поста;
-      - время последнего комментария;
-      - топ-5 комментаторов по этому посту.
-      - (если настроен MTProto) views, reactions, forwards и разбивка реакций.
-
-- `/chart [days]`
-   - Отправляет PNG-график тренда комментариев за выбранный период.
-   - Если `days` не указан, используется `CHART_DEFAULT_DAYS`.
-
-- `/tgstats [posts_limit]`
-   - Возвращает агрегаты Telegram API по последним постам:
-      - суммарные просмотры;
-      - средние просмотры на пост;
-      - суммарные реакции;
-      - суммарные пересылки.
-
-- `/refreshmetrics [posts_limit]`
-   - Принудительно обновляет MTProto-метрики по последним постам канала.
-
-- `/contacts [limit]`
-   - Показывает только ник и ссылку на профиль.
-   - Список строится по последним `CONTACTS_POSTS_LIMIT` постам.
-   - В список попадают только топ `CONTACTS_COMMENTERS_LIMIT` комментаторов.
-   - Берет данные из кеш-таблицы `contacts_cache`.
-
-- `/refreshcontacts`
-    - Принудительно пересобирает кеш списка контактов прямо сейчас.
-
-- `/export_commenters_csv [limit]`
-   - Выгружает CSV всех уникальных комментаторов канала.
-   - Формат: `nickname,comments_count`.
-   - Сортировка: по количеству комментариев (убывание).
-
-- `/export_post_commenters_csv <message_id> [limit]`
-   - Выгружает CSV всех комментаторов указанного поста.
-   - Формат: `nickname,comments_count`.
-   - Сортировка: по количеству комментариев (убывание).
-
-- `/export_post_reactors_csv <message_id> [limit]`
-   - Выгружает CSV пользователей, оставивших реакции на указанный пост (MTProto).
-   - Формат: `nickname,reactions_count,positive_count,negative_count`.
-   - `positive/negative` считаются эвристически по набору emoji.
-
-- `/binddiscussion`
-   - Привязывает текущую группу как discussion-chat в runtime.
-   - Используйте команду внутри discussion-группы.
-
+- `/post`, `/edit`, `/delete`
+- `/tgstats`
 - `/health`
-   - Диагностика ingestion:
-      - проверка linked chat и доступа к нему;
-      - privacy mode;
-      - статус бота в linked chat;
-      - сколько сообщений и автофорвардов увидел бот;
-      - состояние таблиц `discussion_map/comments/users`.
 
-## Ограничения Bot API и MTProto
+Эти операции оставлены в HTTP API.
 
-В каналах Bot API не дает надежно собирать `views` и агрегаты реакций. Поэтому для этих метрик используется MTProto (Telethon) с отдельными credentials.
+## FastAPI API
+
+Базовый URL: `http://WEB_HOST:WEB_PORT`
+
+Swagger:
+
+- `/docs`
+- `/redoc`
+- `/openapi.json`
+
+### JSON endpoints
+
+- `GET /api/summary`
+- `GET /api/stats?hours=24`
+- `GET /api/tgstats?posts_limit=50`
+- `GET /api/top-posts?limit=20`
+- `GET /api/poststats/{message_id}`
+- `GET /api/reactions/post/{message_id}`
+- `GET /api/contacts`
+- `GET /api/commenters/channel?limit=3000`
+- `GET /api/commenters/post/{message_id}?limit=3000`
+- `GET /api/user-metrics?limit=5000`
+
+### Post management endpoints (вместо bot-команд)
+
+- `POST /api/posts`
+  - body: `{ "text": "..." }`
+- `PATCH /api/posts/{message_id}`
+  - body: `{ "text": "..." }`
+- `DELETE /api/posts/{message_id}`
+
+### CSV endpoints
+
+- `GET /api/export/commenters/channel.csv?limit=3000`
+- `GET /api/export/commenters/post/{message_id}.csv?limit=3000`
+- `GET /api/export/reactions/post/{message_id}.csv`
+- `GET /api/export/user-metrics.csv?limit=5000`
+
+### Chart endpoints
+
+- `GET /chart/comments.png?days=14`
+- `GET /chart/views.png?days=14`
+- `GET /chart/reactions.png?days=14`
+- `GET /chart/forwards.png?days=14`
+
+## User-metrics CSV
+
+`/export_user_metrics_csv` и `/api/export/user-metrics.csv` включают:
+
+- `user_id`
+- `nickname`
+- `username`
+- `first_name`
+- `last_name`
+- `profile_url`
+- `comments_count`
+- `posts_commented_count`
+- `linked_chats_count`
+- `first_comment_at`
+- `last_comment_at`
+- `last_activity`
+- `comments_with_contact`
+- `comments_with_intent`
+- `contacts_rank`
+
+## Конфигурация (.env)
+
+Обязательные:
+
+- `BOT_TOKEN`
+- `CHANNEL_ID`
+- `ADMIN_IDS`
+
+Для комментариев:
+
+- `LINKED_CHAT_ID` (можно пустым, если делаете `/binddiscussion`)
+
+Для MTProto:
+
+- `TELEGRAM_API_ID`
+- `TELEGRAM_API_HASH`
+- `TELEGRAM_API_SESSION` (по умолчанию `data/telethon.session`)
+- `TELEGRAM_PROXY_URL` (опционально, `socks5://...`)
+
+Web:
+
+- `WEB_HOST` (по умолчанию `127.0.0.1`)
+- `WEB_PORT` (по умолчанию `8080`)
+- `WEB_RELOAD` (`true/false`)
+
+Кеш и расписание:
+
+- `CONTACTS_POSTS_LIMIT` (по умолчанию `14`)
+- `CONTACTS_COMMENTERS_LIMIT` (по умолчанию `10`)
+- `CONTACTS_REFRESH_HOUR`
+- `CONTACTS_REFRESH_MINUTE`
+- `TZ`
+
+Прочее:
+
+- `MTPROTO_METRICS_POSTS_LIMIT`
+- `CHART_DEFAULT_DAYS`
+- `RUN_STARTUP_TESTS`
 
 ## Быстрый старт
 
-1. Создайте и активируйте окружение:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-2. Установите зависимости:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Подготовьте конфиг:
-   ```bash
-   cp .env.example .env
-   ```
-4. Заполните `.env`:
-   - `BOT_TOKEN`
-   - `CHANNEL_ID`
-   - `LINKED_CHAT_ID` (для комментариев)
-   - `ADMIN_IDS`
-   - `TELEGRAM_API_ID` и `TELEGRAM_API_HASH` (для views/реакций)
-5. Запустите бота:
-   ```bash
-   python main.py
-   ```
+```bash
+cd /path/to/tg_channel_bot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-## Требования к Telegram
+Запуск бота:
 
-- Бот добавлен в канал как администратор (права на публикацию/редактирование/удаление).
-- Если нужна аналитика комментариев: канал должен быть связан с discussion group, и бот должен быть в ней.
-- В BotFather желательно отключить privacy mode (`/setprivacy -> Disable`), иначе бот в группе может видеть только команды.
+```bash
+python3 main.py
+```
 
-## SSH port forwarding (операционный этап до Telegram API/Telethon)
+Запуск веб-панели:
 
-Пока интеграции с Telegram API и Telethon не реализованы, сетевой маршрут можно подготовить через SSH-туннель:
+```bash
+python3 run_web.py
+```
 
-1. Поднимите SOCKS5-туннель:
-   ```bash
-   ssh -N -D 127.0.0.1:1080 user@remote-server
-   ```
-2. Направляйте внешние запросы через `socks5://127.0.0.1:1080`.
-3. Для продакшена установите `autossh` и используйте `systemd`, чтобы туннель автоматически восстанавливался.
+## Миграции БД
 
-Пошаговый runbook: `infra/ssh-portforwarding.md`, шаблон юнита: `infra/systemd/bot-socks-tunnel.service`.
+При `db.init_schema()` автоматически применяются миграции:
 
-## Предстартовые тесты
+- удаление устаревшей таблицы `leads`;
+- миграция `stats_snapshots` без столбца `leads_count`.
 
-Перед запуском бота автоматически выполняются:
-- локальные unit-тесты (`python -m unittest discover -s tests -p "test_*.py"`);
-- проверка доступа бота к Telegram и каналу;
-- при включенном MTProto — пробный запрос метрик.
+## Тестирование
 
-Отключение: `RUN_STARTUP_TESTS=false`.
+Тесты переведены на `pytest`.
 
-## Если MTProto пишет про bot users restricted
+Запуск:
 
-Ошибка вида `BotMethodInvalidError: ... cannot be executed as a bot` означает, что файл `TELEGRAM_API_SESSION` авторизован как бот, а не как пользователь.
+```bash
+python3 -m pytest -q
+```
 
-Сделайте переавторизацию Telethon-сессии:
+Покрываются:
 
-1. Остановите бота.
-2. Удалите старую сессию:
-   - `rm -f data/telethon.session data/telethon.session-journal`
-3. Запустите login-flow:
-   - `python scripts/telethon_login_user.py`
-4. Введите номер телефона, код из Telegram и при необходимости 2FA-пароль.
-5. Запустите бота снова и выполните `/refreshmetrics`.
-
-## Если комментарии не считаются
-
-1. Запустите `/health` в личке с ботом и проверьте:
-   - `Bot privacy disabled: True`
-   - `Seen group messages` растет после сообщений в discussion-чате.
-2. Вызовите `/binddiscussion` прямо в discussion-группе.
-3. Напишите комментарий под постом и снова проверьте `/health` + `/stats 24`.
-
-## Структура проекта
-
-- `main.py` - entrypoint
-- `app/config.py` - загрузка настроек
-- `app/db.py` - схема и подключение SQLite
-- `app/repositories.py` - операции БД
-- `app/services.py` - анализ текста комментариев (lead scoring)
-- `app/handlers.py` - команды и обработка сообщений
-- `app/jobs.py` - периодические фоновые задачи
-- `app/charts.py` - генерация PNG-графиков
-- `app/web.py` - FastAPI веб-панель
-- `run_web.py` - запуск веб-панели
-- `web/templates/dashboard.html` - шаблон дашборда
-
-## Настройки эффективности списка контактов
-
-В `.env`:
-
-- `CONTACTS_POSTS_LIMIT` - по скольким последним постам считать активность.
-- `CONTACTS_COMMENTERS_LIMIT` - сколько комментаторов хранить в выдаче `/contacts`.
-- `CONTACTS_REFRESH_HOUR` и `CONTACTS_REFRESH_MINUTE` - ежедневное время пересборки списка.
-- `TZ` - часовой пояс для расписания.
-
-## Веб-панель FastAPI
-
-1. Установите зависимости:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Настройте в `.env`:
-   - `WEB_HOST` (например `127.0.0.1`)
-   - `WEB_PORT` (например `8080`)
-   - `CHART_DEFAULT_DAYS` (например `14`)
-3. Запустите панель:
-   ```bash
-   python run_web.py
-   ```
-4. Откройте:
-    - `http://WEB_HOST:WEB_PORT/` - дашборд
-    - `http://WEB_HOST:WEB_PORT/api/summary` - JSON-сводка
-    - `http://WEB_HOST:WEB_PORT/api/stats?hours=24` - JSON-статистика за период
-    - `http://WEB_HOST:WEB_PORT/api/tgstats?posts_limit=50` - JSON-агрегаты MTProto
-    - `http://WEB_HOST:WEB_PORT/api/poststats/<message_id>` - JSON аналитика поста
-    - `http://WEB_HOST:WEB_PORT/api/contacts` - JSON контакты из кеша
-    - `http://WEB_HOST:WEB_PORT/api/commenters/channel` - JSON уникальные комментаторы канала
-    - `http://WEB_HOST:WEB_PORT/api/commenters/post/<message_id>` - JSON комментаторы поста
-    - `http://WEB_HOST:WEB_PORT/api/reactors/post/<message_id>` - JSON реакторы поста (MTProto)
-    - `http://WEB_HOST:WEB_PORT/api/export/commenters/channel.csv` - CSV уникальные комментаторы канала
-    - `http://WEB_HOST:WEB_PORT/api/export/commenters/post/<message_id>.csv` - CSV комментаторы поста
-    - `http://WEB_HOST:WEB_PORT/api/export/reactors/post/<message_id>.csv` - CSV реакторы поста (MTProto)
-    - `http://WEB_HOST:WEB_PORT/chart/comments.png?days=14` - график
-    - `http://WEB_HOST:WEB_PORT/chart/views.png?days=14` - график просмотров
-    - `http://WEB_HOST:WEB_PORT/chart/reactions.png?days=14` - график реакций
-    - `http://WEB_HOST:WEB_PORT/chart/forwards.png?days=14` - график репостов
-
-## Дальше (Phase 2)
-
-- Экспорт лидов в CSV.
-- Расширение MTProto-метрик (ERR, retention, cohort по периодам).
-- Веб-панель (FastAPI) для операторов.
+- репозиторий и агрегации,
+- миграция БД,
+- chart helper-функции,
+- web JSON/CSV endpoints,
+- API CRUD постов (через mock Bot).

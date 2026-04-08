@@ -13,7 +13,6 @@ class AggregateStats:
     posts_count: int
     comments_count: int
     unique_commenters: int
-    leads_count: int
 
 
 @dataclass(slots=True)
@@ -137,42 +136,16 @@ class BotRepository:
         )
         return True
 
-    def upsert_lead(self, user_id: int, score_delta: int, tags: set[str]) -> None:
-        row = self.db.fetchone("SELECT score, tags FROM leads WHERE user_id=?", (user_id,))
-        now = self._now_iso()
-
-        if not row:
-            self.db.execute(
-                """
-                INSERT INTO leads(user_id, score, tags, status, updated_at)
-                VALUES (?, ?, ?, 'new', ?)
-                """,
-                (user_id, score_delta, ",".join(sorted(tags)), now),
-            )
-            return
-
-        existing_tags = set(filter(None, (row["tags"] or "").split(",")))
-        merged_tags = existing_tags | tags
-        self.db.execute(
-            """
-            UPDATE leads
-            SET score=?, tags=?, updated_at=?
-            WHERE user_id=?
-            """,
-            (int(row["score"]) + score_delta, ",".join(sorted(merged_tags)), now, user_id),
-        )
-
     def get_top_contacts(self, limit: int = 10) -> list[dict]:
         rows = self.db.fetchall(
             """
-            SELECT u.user_id, u.username, u.first_name, u.last_name, u.comment_count,
-                   COALESCE(l.score, 0) AS score,
-                   COALESCE(l.tags, '') AS tags,
-                   COALESCE(l.status, 'new') AS status
-            FROM users u
-            LEFT JOIN leads l ON l.user_id = u.user_id
+             SELECT u.user_id, u.username, u.first_name, u.last_name, u.comment_count,
+                 0 AS score,
+                 '' AS tags,
+                 'new' AS status
+             FROM users u
             WHERE u.comment_count > 0
-            ORDER BY score DESC, u.comment_count DESC, u.last_activity DESC
+             ORDER BY u.comment_count DESC, u.last_activity DESC
             LIMIT ?
             """,
             (limit,),
@@ -341,6 +314,77 @@ class BotRepository:
             )
         return result
 
+    def get_user_metrics_report(self, limit: int = 10000) -> list[dict]:
+        limit = max(1, min(50000, int(limit)))
+        rows = self.db.fetchall(
+            """
+            WITH comment_stats AS (
+                SELECT c.user_id,
+                       COUNT(*) AS comments_count,
+                       COUNT(DISTINCT c.channel_post_id) AS posts_commented_count,
+                       COUNT(DISTINCT c.linked_chat_id) AS linked_chats_count,
+                       MIN(c.created_at) AS first_comment_at,
+                       MAX(c.created_at) AS last_comment_at,
+                       SUM(CASE WHEN c.has_contact = 1 THEN 1 ELSE 0 END) AS comments_with_contact,
+                       SUM(CASE WHEN c.has_intent = 1 THEN 1 ELSE 0 END) AS comments_with_intent
+                FROM comments c
+                GROUP BY c.user_id
+            )
+                 SELECT u.user_id,
+                   u.username,
+                   u.first_name,
+                   u.last_name,
+                   COALESCE(cs.comments_count, 0) AS comments_count,
+                   COALESCE(cs.posts_commented_count, 0) AS posts_commented_count,
+                   COALESCE(cs.linked_chats_count, 0) AS linked_chats_count,
+                   cs.first_comment_at,
+                   cs.last_comment_at,
+                   u.last_activity,
+                   COALESCE(cs.comments_with_contact, 0) AS comments_with_contact,
+                   COALESCE(cs.comments_with_intent, 0) AS comments_with_intent,
+                   cc.rank_pos AS contacts_rank
+            FROM users u
+            LEFT JOIN comment_stats cs ON cs.user_id = u.user_id
+            LEFT JOIN contacts_cache cc ON cc.user_id = u.user_id
+            ORDER BY comments_count DESC, COALESCE(u.last_activity, cs.last_comment_at) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+
+        result: list[dict] = []
+        for row in rows:
+            user_id = int(row["user_id"])
+            username = (row["username"] or "").strip() or None
+            first_name = (row["first_name"] or "").strip() or None
+            last_name = (row["last_name"] or "").strip() or None
+            nickname = self._display_nickname(
+                user_id=user_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            result.append(
+                {
+                    "user_id": user_id,
+                    "nickname": nickname,
+                    "username": username,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "profile_url": self._profile_url_for_user(user_id=user_id, username=username),
+                    "comments_count": int(row["comments_count"] or 0),
+                    "posts_commented_count": int(row["posts_commented_count"] or 0),
+                    "linked_chats_count": int(row["linked_chats_count"] or 0),
+                    "first_comment_at": row["first_comment_at"],
+                    "last_comment_at": row["last_comment_at"],
+                    "last_activity": row["last_activity"],
+                    "comments_with_contact": int(row["comments_with_contact"] or 0),
+                    "comments_with_intent": int(row["comments_with_intent"] or 0),
+                    "contacts_rank": int(row["contacts_rank"]) if row["contacts_rank"] is not None else None,
+                }
+            )
+        return result
+
     def aggregate_stats(self, period_hours: int = 24) -> AggregateStats:
         since = datetime.now(tz=timezone.utc) - timedelta(hours=period_hours)
         since_iso = since.isoformat()
@@ -357,13 +401,10 @@ class BotRepository:
             "SELECT COUNT(DISTINCT user_id) AS c FROM comments WHERE created_at >= ?",
             (since_iso,),
         )
-        leads_row = self.db.fetchone("SELECT COUNT(*) AS c FROM leads", ())
-
         return AggregateStats(
             posts_count=int(posts_row["c"] if posts_row else 0),
             comments_count=int(comments_row["c"] if comments_row else 0),
             unique_commenters=int(unique_row["c"] if unique_row else 0),
-            leads_count=int(leads_row["c"] if leads_row else 0),
         )
 
     def save_snapshot(self, period_hours: int = 24) -> AggregateStats:
@@ -371,8 +412,8 @@ class BotRepository:
         self.db.execute(
             """
             INSERT INTO stats_snapshots(
-                snapshot_at, period_hours, posts_count, comments_count, unique_commenters, leads_count
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                snapshot_at, period_hours, posts_count, comments_count, unique_commenters
+            ) VALUES (?, ?, ?, ?, ?)
             """,
             (
                 self._now_iso(),
@@ -380,7 +421,6 @@ class BotRepository:
                 stats.posts_count,
                 stats.comments_count,
                 stats.unique_commenters,
-                stats.leads_count,
             ),
         )
         return stats
@@ -427,15 +467,6 @@ class BotRepository:
             "SELECT COUNT(DISTINCT user_id) AS c FROM comments WHERE channel_post_id = ?",
             (message_id,),
         )
-        leads_row = self.db.fetchone(
-            """
-            SELECT COUNT(DISTINCT c.user_id) AS c
-            FROM comments c
-            JOIN leads l ON l.user_id = c.user_id
-            WHERE c.channel_post_id = ?
-            """,
-            (message_id,),
-        )
         last_comment_row = self.db.fetchone(
             "SELECT MAX(created_at) AS ts FROM comments WHERE channel_post_id = ?",
             (message_id,),
@@ -460,7 +491,7 @@ class BotRepository:
             "post": dict(post_row),
             "comments_count": int(comments_row["c"] if comments_row else 0),
             "unique_commenters": int(unique_row["c"] if unique_row else 0),
-            "leads_in_comments": int(leads_row["c"] if leads_row else 0),
+            "leads_in_comments": 0,
             "last_comment_at": last_comment_row["ts"] if last_comment_row else None,
             "top_commenters": [dict(r) for r in top_rows],
             "latest_metric": latest_metric,
@@ -470,14 +501,16 @@ class BotRepository:
         posts_row = self.db.fetchone("SELECT COUNT(*) AS c FROM posts WHERE deleted_at IS NULL", ())
         comments_row = self.db.fetchone("SELECT COUNT(*) AS c FROM comments", ())
         unique_row = self.db.fetchone("SELECT COUNT(DISTINCT user_id) AS c FROM comments", ())
-        leads_row = self.db.fetchone("SELECT COUNT(*) AS c FROM leads", ())
         metrics = self.get_latest_channel_metric_stats(limit_posts=50)
+        avg_unique_views = round(metrics.avg_views_per_post, 1) if metrics.posts_sampled else 0.0
         return {
             "posts": int(posts_row["c"] if posts_row else 0),
             "comments": int(comments_row["c"] if comments_row else 0),
             "unique_commenters": int(unique_row["c"] if unique_row else 0),
-            "leads": int(leads_row["c"] if leads_row else 0),
-            "views_total": metrics.total_views,
+            "leads": 0,
+            # Kept for backward compatibility: now represents average unique views per post.
+            "views_total": avg_unique_views,
+            "unique_views_avg_per_post": avg_unique_views,
             "reactions_total": metrics.total_reactions,
             "forwards_total": metrics.total_forwards,
             "posts_sampled": metrics.posts_sampled,
@@ -598,50 +631,33 @@ class BotRepository:
         return item
 
     def get_channel_metric_trend(self, metric: str, days: int = 14) -> list[dict]:
-        trend_queries = {
-            "views": """
-                WITH points AS (
-                    SELECT snapshot_at, SUM(views) AS total_value
-                    FROM post_metrics_snapshots
-                    GROUP BY snapshot_at
-                )
-                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
-                       MAX(total_value) AS value
-                FROM points
-                WHERE snapshot_at >= datetime('now', ?)
-                GROUP BY day
-                ORDER BY day ASC
-            """,
-            "reactions": """
-                WITH points AS (
-                    SELECT snapshot_at, SUM(reactions_total) AS total_value
-                    FROM post_metrics_snapshots
-                    GROUP BY snapshot_at
-                )
-                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
-                       MAX(total_value) AS value
-                FROM points
-                WHERE snapshot_at >= datetime('now', ?)
-                GROUP BY day
-                ORDER BY day ASC
-            """,
-            "forwards": """
-                WITH points AS (
-                    SELECT snapshot_at, SUM(forwards) AS total_value
-                    FROM post_metrics_snapshots
-                    GROUP BY snapshot_at
-                )
-                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
-                       MAX(total_value) AS value
-                FROM points
-                WHERE snapshot_at >= datetime('now', ?)
-                GROUP BY day
-                ORDER BY day ASC
-            """,
+        metric_fields = {
+            "views": "views",
+            "reactions": "reactions_total",
+            "forwards": "forwards",
         }
-        query = trend_queries.get(metric)
-        if not query:
+        metric_field = metric_fields.get(metric)
+        if not metric_field:
             raise ValueError("Unsupported metric")
         days = max(1, min(365, int(days)))
+        query = f"""
+            WITH ranked AS (
+                SELECT strftime('%Y-%m-%d', snapshot_at) AS day,
+                       message_id,
+                       {metric_field} AS value,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY strftime('%Y-%m-%d', snapshot_at), message_id
+                           ORDER BY snapshot_at DESC, id DESC
+                       ) AS rn
+                FROM post_metrics_snapshots
+                WHERE snapshot_at >= datetime('now', ?)
+            )
+            SELECT day,
+                   SUM(value) AS value
+            FROM ranked
+            WHERE rn = 1
+            GROUP BY day
+            ORDER BY day ASC
+        """
         rows = self.db.fetchall(query, (f"-{days} day",))
         return [dict(r) for r in rows]

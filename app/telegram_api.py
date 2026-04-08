@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from telethon import TelegramClient
+from telethon.errors.rpcerrorlist import BotMethodInvalidError, BroadcastForbiddenError
 from telethon.tl.functions.messages import GetMessageReactionsListRequest
 from telethon.tl.types import PeerChannel, PeerChat, PeerUser
 
@@ -72,6 +73,27 @@ def _reaction_sentiment(reaction_key: str) -> str:
     if reaction_key in NEGATIVE_REACTIONS:
         return "negative"
     return "neutral"
+
+
+def describe_reaction_key(reaction_key: str) -> str:
+    """Return a human-readable reaction description for exports."""
+    key = (reaction_key or "").strip()
+    if not key:
+        return "Unknown reaction"
+
+    if key.startswith("custom:"):
+        custom_id = key.split(":", 1)[1] or "unknown"
+        return f"Custom emoji (id {custom_id})"
+
+    sentiment = _reaction_sentiment(key)
+    if sentiment == "positive":
+        return f"Positive emoji ({key})"
+    if sentiment == "negative":
+        return f"Negative emoji ({key})"
+
+    if len(key) <= 4:
+        return f"Emoji ({key})"
+    return f"Reaction type ({key})"
 
 
 class TelegramApiMetricsService:
@@ -146,83 +168,92 @@ class TelegramApiMetricsService:
         remaining = max(1, min(10000, int(limit)))
         offset: str | None = None
 
-        async with client:
-            entity = await client.get_input_entity(self.settings.channel_id)
+        try:
+            async with client:
+                entity = await client.get_input_entity(self.settings.channel_id)
 
-            while remaining > 0:
-                page_limit = min(100, remaining)
-                response = await client(
-                    GetMessageReactionsListRequest(
-                        peer=entity,
-                        id=int(message_id),
-                        limit=page_limit,
-                        reaction=None,
-                        offset=offset,
+                while remaining > 0:
+                    page_limit = min(100, remaining)
+                    response = await client(
+                        GetMessageReactionsListRequest(
+                            peer=entity,
+                            id=int(message_id),
+                            limit=page_limit,
+                            reaction=None,
+                            offset=offset,
+                        )
                     )
-                )
 
-                users_map = {int(user.id): user for user in getattr(response, "users", []) or []}
-                chats_map = {int(chat.id): chat for chat in getattr(response, "chats", []) or []}
+                    users_map = {int(user.id): user for user in getattr(response, "users", []) or []}
+                    chats_map = {int(chat.id): chat for chat in getattr(response, "chats", []) or []}
 
-                reactions = getattr(response, "reactions", []) or []
-                if not reactions:
-                    break
+                    reactions = getattr(response, "reactions", []) or []
+                    if not reactions:
+                        break
 
-                for row in reactions:
-                    peer = getattr(row, "peer_id", None)
-                    reaction_key = _reaction_to_key(getattr(row, "reaction", None))
-                    sentiment = _reaction_sentiment(reaction_key)
+                    for row in reactions:
+                        peer = getattr(row, "peer_id", None)
+                        reaction_key = _reaction_to_key(getattr(row, "reaction", None))
+                        sentiment = _reaction_sentiment(reaction_key)
 
-                    user_id: int | None = None
-                    username: str | None = None
-                    nickname: str | None = None
+                        user_id: int | None = None
+                        username: str | None = None
+                        nickname: str | None = None
 
-                    if isinstance(peer, PeerUser):
-                        user_id = int(peer.user_id)
-                        user = users_map.get(user_id)
-                        username = (getattr(user, "username", None) or "").strip() or None
-                        if username:
-                            nickname = f"@{username}"
-                        else:
-                            first_name = (getattr(user, "first_name", None) or "").strip()
-                            last_name = (getattr(user, "last_name", None) or "").strip()
-                            nickname = " ".join(part for part in [first_name, last_name] if part).strip() or str(user_id)
-                    elif isinstance(peer, PeerChannel):
-                        user_id = -int(peer.channel_id)
-                        chat = chats_map.get(int(peer.channel_id))
-                        username = (getattr(chat, "username", None) or "").strip() or None
-                        title = (getattr(chat, "title", None) or "").strip()
-                        nickname = f"@{username}" if username else (title or str(user_id))
-                    elif isinstance(peer, PeerChat):
-                        user_id = -int(peer.chat_id)
-                        chat = chats_map.get(int(peer.chat_id))
-                        username = (getattr(chat, "username", None) or "").strip() or None
-                        title = (getattr(chat, "title", None) or "").strip()
-                        nickname = f"@{username}" if username else (title or str(user_id))
+                        if isinstance(peer, PeerUser):
+                            user_id = int(peer.user_id)
+                            user = users_map.get(user_id)
+                            username = (getattr(user, "username", None) or "").strip() or None
+                            if username:
+                                nickname = f"@{username}"
+                            else:
+                                first_name = (getattr(user, "first_name", None) or "").strip()
+                                last_name = (getattr(user, "last_name", None) or "").strip()
+                                nickname = " ".join(part for part in [first_name, last_name] if part).strip() or str(user_id)
+                        elif isinstance(peer, PeerChannel):
+                            user_id = -int(peer.channel_id)
+                            chat = chats_map.get(int(peer.channel_id))
+                            username = (getattr(chat, "username", None) or "").strip() or None
+                            title = (getattr(chat, "title", None) or "").strip()
+                            nickname = f"@{username}" if username else (title or str(user_id))
+                        elif isinstance(peer, PeerChat):
+                            user_id = -int(peer.chat_id)
+                            chat = chats_map.get(int(peer.chat_id))
+                            username = (getattr(chat, "username", None) or "").strip() or None
+                            title = (getattr(chat, "title", None) or "").strip()
+                            nickname = f"@{username}" if username else (title or str(user_id))
 
-                    if user_id is None:
-                        continue
-                    item = aggregated.setdefault(
-                        user_id,
-                        {
-                            "user_id": user_id,
-                            "nickname": nickname or str(user_id),
-                            "username": username,
-                            "reactions_count": 0,
-                            "positive_count": 0,
-                            "negative_count": 0,
-                        },
-                    )
-                    item["reactions_count"] += 1
-                    if sentiment == "positive":
-                        item["positive_count"] += 1
-                    elif sentiment == "negative":
-                        item["negative_count"] += 1
+                        if user_id is None:
+                            continue
+                        item = aggregated.setdefault(
+                            user_id,
+                            {
+                                "user_id": user_id,
+                                "nickname": nickname or str(user_id),
+                                "username": username,
+                                "reactions_count": 0,
+                                "positive_count": 0,
+                                "negative_count": 0,
+                            },
+                        )
+                        item["reactions_count"] += 1
+                        if sentiment == "positive":
+                            item["positive_count"] += 1
+                        elif sentiment == "negative":
+                            item["negative_count"] += 1
 
-                remaining -= len(reactions)
-                offset = getattr(response, "next_offset", None)
-                if not offset:
-                    break
+                    remaining -= len(reactions)
+                    offset = getattr(response, "next_offset", None)
+                    if not offset:
+                        break
+        except BotMethodInvalidError as exc:
+            raise RuntimeError(
+                "MTProto-сессия авторизована как бот. Для экспорта реакторов нужна user-сессия Telethon."
+            ) from exc
+        except BroadcastForbiddenError as exc:
+            raise RuntimeError(
+                "Telegram API не позволяет выгружать список пользователей, оставивших реакции, для постов broadcast-канала."
+            ) from exc
 
         sorted_rows = sorted(
             aggregated.values(),

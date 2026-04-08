@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from telegram.error import Conflict
 from telegram.error import NetworkError
+from telegram import BotCommand
 from telegram.request import HTTPXRequest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -19,21 +20,19 @@ from app.db import Database
 from app.handlers import (
     cmd_binddiscussion,
     cmd_chart,
-    cmd_health,
+    cmd_help,
     cmd_contacts,
-    cmd_delete,
-    cmd_edit,
+    cmd_viewschart,
     cmd_export_commenters_csv,
+    cmd_export_user_metrics_csv,
     cmd_export_post_commenters_csv,
-    cmd_export_post_reactors_csv,
+    cmd_export_post_reactions_csv,
     cmd_poststats,
     cmd_refreshcontacts,
     on_channel_post,
-    cmd_post,
     cmd_start,
     cmd_stats,
     cmd_refreshmetrics,
-    cmd_tgstats,
     on_linked_chat_message,
 )
 from app.jobs import refresh_contacts_cache_job, refresh_mtproto_metrics_job, snapshot_job
@@ -102,6 +101,25 @@ async def on_post_init(app: Application) -> None:
         )
         settings.linked_chat_id = api_linked_chat_id
 
+    await app.bot.set_my_commands(
+        [
+            BotCommand("start", "Показать стартовую справку"),
+            BotCommand("help", "Показать список команд"),
+            BotCommand("stats", "Сводная статистика"),
+            BotCommand("poststats", "Аналитика по post message_id"),
+            BotCommand("chart", "График комментариев"),
+            BotCommand("viewschart", "График просмотров"),
+            BotCommand("refreshmetrics", "Обновить MTProto-метрики"),
+            BotCommand("contacts", "Топ комментаторов"),
+            BotCommand("refreshcontacts", "Обновить кэш контактов"),
+            BotCommand("export_user_metrics_csv", "CSV метрик пользователей"),
+            BotCommand("export_commenters_csv", "CSV комментаторов канала"),
+            BotCommand("export_post_commenters_csv", "CSV комментаторов поста"),
+            BotCommand("export_post_reactions_csv", "CSV агрегированных реакций"),
+            BotCommand("binddiscussion", "Привязать discussion-чат"),
+        ]
+    )
+
 
 def build_app(settings: Settings) -> Application:
 
@@ -133,21 +151,19 @@ def build_app(settings: Settings) -> Application:
     app.bot_data["ingestion_counters"] = {"group_messages_seen": 0, "auto_forwards_seen": 0}
 
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("post", cmd_post))
-    app.add_handler(CommandHandler("edit", cmd_edit))
-    app.add_handler(CommandHandler("delete", cmd_delete))
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("chart", cmd_chart))
-    app.add_handler(CommandHandler("tgstats", cmd_tgstats))
+    app.add_handler(CommandHandler("viewschart", cmd_viewschart))
     app.add_handler(CommandHandler("refreshmetrics", cmd_refreshmetrics))
     app.add_handler(CommandHandler("poststats", cmd_poststats))
     app.add_handler(CommandHandler("contacts", cmd_contacts))
     app.add_handler(CommandHandler("refreshcontacts", cmd_refreshcontacts))
+    app.add_handler(CommandHandler("export_user_metrics_csv", cmd_export_user_metrics_csv))
     app.add_handler(CommandHandler("export_commenters_csv", cmd_export_commenters_csv))
     app.add_handler(CommandHandler("export_post_commenters_csv", cmd_export_post_commenters_csv))
-    app.add_handler(CommandHandler("export_post_reactors_csv", cmd_export_post_reactors_csv))
+    app.add_handler(CommandHandler("export_post_reactions_csv", cmd_export_post_reactions_csv))
     app.add_handler(CommandHandler("binddiscussion", cmd_binddiscussion))
-    app.add_handler(CommandHandler("health", cmd_health))
     app.add_error_handler(on_error)
 
     app.add_handler(

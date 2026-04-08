@@ -15,11 +15,10 @@ async def snapshot_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     repo: BotRepository = context.application.bot_data["repo"]
     stats = repo.save_snapshot(period_hours=24)
     LOGGER.info(
-        "Saved stats snapshot: posts=%s comments=%s unique=%s leads=%s",
+        "Saved stats snapshot: posts=%s comments=%s unique=%s",
         stats.posts_count,
         stats.comments_count,
         stats.unique_commenters,
-        stats.leads_count,
     )
 
 

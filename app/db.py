@@ -40,15 +40,6 @@ CREATE TABLE IF NOT EXISTS comments (
     FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
-CREATE TABLE IF NOT EXISTS leads (
-    user_id INTEGER PRIMARY KEY,
-    score INTEGER NOT NULL DEFAULT 0,
-    tags TEXT,
-    status TEXT NOT NULL DEFAULT 'new',
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY(user_id) REFERENCES users(user_id)
-);
-
 CREATE TABLE IF NOT EXISTS discussion_map (
     linked_chat_id INTEGER NOT NULL,
     root_group_message_id INTEGER NOT NULL,
@@ -63,8 +54,7 @@ CREATE TABLE IF NOT EXISTS stats_snapshots (
     period_hours INTEGER NOT NULL,
     posts_count INTEGER NOT NULL,
     comments_count INTEGER NOT NULL,
-    unique_commenters INTEGER NOT NULL,
-    leads_count INTEGER NOT NULL
+    unique_commenters INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS bot_actions (
@@ -118,7 +108,40 @@ class Database:
     def init_schema(self) -> None:
         with self._lock:
             self._conn.executescript(SCHEMA_SQL)
+            self._run_migrations()
             self._conn.commit()
+
+    def _run_migrations(self) -> None:
+        # Migration 1: drop obsolete leads table if present.
+        self._conn.execute("DROP TABLE IF EXISTS leads")
+
+        # Migration 2: rebuild stats_snapshots without deprecated leads_count column.
+        cols = self._conn.execute("PRAGMA table_info(stats_snapshots)").fetchall()
+        col_names = {str(row[1]) for row in cols}
+        if "leads_count" not in col_names:
+            return
+
+        self._conn.execute("ALTER TABLE stats_snapshots RENAME TO stats_snapshots_old")
+        self._conn.execute(
+            """
+            CREATE TABLE stats_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_at TEXT NOT NULL,
+                period_hours INTEGER NOT NULL,
+                posts_count INTEGER NOT NULL,
+                comments_count INTEGER NOT NULL,
+                unique_commenters INTEGER NOT NULL
+            )
+            """
+        )
+        self._conn.execute(
+            """
+            INSERT INTO stats_snapshots(id, snapshot_at, period_hours, posts_count, comments_count, unique_commenters)
+            SELECT id, snapshot_at, period_hours, posts_count, comments_count, unique_commenters
+            FROM stats_snapshots_old
+            """
+        )
+        self._conn.execute("DROP TABLE stats_snapshots_old")
 
     def execute(self, query: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:

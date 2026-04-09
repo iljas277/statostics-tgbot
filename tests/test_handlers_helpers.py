@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
+from app.config import Settings
 from app.handlers import _csv_bytes
 from app.handlers import _extract_comment_author
 from app.handlers import _extract_forward_channel_info
 from app.handlers import _format_timestamp
 from app.handlers import _resolve_channel_post_id
+from app.handlers import on_channel_post
 
 
 class _FakeRepo:
@@ -15,6 +20,20 @@ class _FakeRepo:
 
     def get_channel_post_by_discussion_root(self, linked_chat_id: int, root_group_message_id: int) -> int | None:
         return self.mapping.get((linked_chat_id, root_group_message_id))
+
+
+class _FakeRepoWithMetrics:
+    def __init__(self) -> None:
+        self.posts: list[tuple[int, int, str | None]] = []
+        self.metrics_rows: list[dict] = []
+
+    def upsert_post(self, channel_id: int, message_id: int, text: str | None) -> None:
+        self.posts.append((channel_id, message_id, text))
+
+    def save_post_metrics_snapshots(self, rows: list[dict], snapshot_at: str) -> int:
+        _ = snapshot_at
+        self.metrics_rows.extend(rows)
+        return len(rows)
 
 
 def test_format_timestamp_handles_empty_invalid_and_iso() -> None:
@@ -105,3 +124,48 @@ def test_resolve_channel_post_id_returns_none_when_not_found() -> None:
     repo = _FakeRepo({})
     message = SimpleNamespace(message_thread_id=None, reply_to_message=None)
     assert _resolve_channel_post_id(message=message, linked_chat_id=-2001, repo=repo, channel_id=-100123) is None
+
+
+def test_on_channel_post_saves_post_and_metrics_snapshot() -> None:
+    settings = Settings(
+        bot_token="test-token",
+        channel_id=-100123,
+        linked_chat_id=None,
+        admin_ids={1},
+        db_path=Path("data/bot.sqlite3"),
+        log_level="INFO",
+        tz="UTC",
+        contacts_posts_limit=14,
+        contacts_commenters_limit=10,
+        contacts_refresh_hour=9,
+        contacts_refresh_minute=0,
+        web_host="127.0.0.1",
+        web_port=8080,
+        web_reload=False,
+        chart_default_days=14,
+        telegram_proxy_url=None,
+        mtproto_metrics_posts_limit=50,
+        run_startup_tests=False,
+    )
+    repo = _FakeRepoWithMetrics()
+    message = SimpleNamespace(
+        chat=SimpleNamespace(id=-100123),
+        message_id=77,
+        text="hello",
+        caption=None,
+        date=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc),
+        views=10,
+        forwards=2,
+        reaction_count=[SimpleNamespace(reaction=SimpleNamespace(emoji="👍"), total_count=4)],
+    )
+    update = SimpleNamespace(channel_post=message)
+    context = SimpleNamespace(application=SimpleNamespace(bot_data={"settings": settings, "repo": repo}))
+
+    asyncio.run(on_channel_post(update, context))
+
+    assert repo.posts == [(-100123, 77, "hello")]
+    assert len(repo.metrics_rows) == 1
+    assert repo.metrics_rows[0]["message_id"] == 77
+    assert repo.metrics_rows[0]["views"] == 10
+    assert repo.metrics_rows[0]["forwards"] == 2
+    assert repo.metrics_rows[0]["reactions_total"] == 4

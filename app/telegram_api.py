@@ -94,7 +94,7 @@ def describe_reaction_key(reaction_key: str) -> str:
     if sentiment == "negative":
         return f"Negative emoji ({key})"
 
-    if len(key) <= 8:
+    if len(key) <= 4:
         return f"Emoji ({key})"
     return f"Reaction type ({key})"
 

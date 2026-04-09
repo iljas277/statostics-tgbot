@@ -12,7 +12,7 @@ Python-бот и FastAPI-панель для аналитики Telegram-кан�
   - агрегированные реакции поста,
   - полный user-metrics отчет.
 - Web API + Dashboard + PNG-графики.
-- MTProto-метрики по постам (views/reactions/forwards) через Telethon.
+- Метрики по постам (views/reactions/forwards) из Telegram Bot API (сохраняются при получении `channel_post`).
 
 ## Команды бота
 
@@ -21,7 +21,7 @@ Python-бот и FastAPI-панель для аналитики Telegram-кан�
 - `/stats [hours]` - сводка за период.
 - `/poststats <message_id>` - аналитика конкретного поста.
 - `/chart [days]` - график комментариев.
-- `/refreshmetrics [posts_limit]` - обновление MTProto-снапшотов.
+- `/refreshmetrics` - справка по обновлению метрик (в Bot API режиме снапшоты пишутся автоматически).
 - `/contacts` - кешированный список активных комментаторов.
 - `/refreshcontacts` - пересборка кеша контактов.
 - `/export_user_metrics_csv [limit]` - CSV по пользователям и их метрикам.
@@ -115,12 +115,10 @@ Swagger:
 
 - `LINKED_CHAT_ID` (можно пустым, если делаете `/binddiscussion`)
 
-Для MTProto:
+Для Telegram Bot API:
 
-- `TELEGRAM_API_ID`
-- `TELEGRAM_API_HASH`
-- `TELEGRAM_API_SESSION` (по умолчанию `data/telethon.session`)
 - `TELEGRAM_PROXY_URL` (опционально, `socks5://...`)
+- `MTPROTO_METRICS_POSTS_LIMIT` (размер окна последних постов в агрегированных метриках)
 
 Web:
 

@@ -28,9 +28,6 @@ def _settings(db_path: Path) -> Settings:
         web_reload=False,
         chart_default_days=14,
         telegram_proxy_url=None,
-        telegram_api_id=None,
-        telegram_api_hash=None,
-        telegram_api_session="data/telethon.session",
         mtproto_metrics_posts_limit=50,
         run_startup_tests=False,
     )
@@ -94,7 +91,7 @@ def test_not_found_endpoints_return_404(tmp_path: Path) -> None:
     assert reactions.json()["error"] == "not_found"
 
 
-def test_mtproto_disabled_reactors_endpoints(tmp_path: Path) -> None:
+def test_bot_api_limitation_reactors_endpoints(tmp_path: Path) -> None:
     db_path = tmp_path / "web.sqlite3"
     _seed(db_path)
 
@@ -102,12 +99,12 @@ def test_mtproto_disabled_reactors_endpoints(tmp_path: Path) -> None:
     client = TestClient(app)
 
     json_resp = client.get("/api/reactors/post/10")
-    assert json_resp.status_code == 400
-    assert json_resp.json()["error"] == "mtproto_disabled"
+    assert json_resp.status_code == 501
+    assert json_resp.json()["error"] == "bot_api_limitation"
 
     csv_resp = client.get("/api/export/reactors/post/10.csv")
-    assert csv_resp.status_code == 400
-    assert csv_resp.json()["error"] == "mtproto_disabled"
+    assert csv_resp.status_code == 501
+    assert csv_resp.json()["error"] == "bot_api_limitation"
 
 
 def test_export_endpoints_return_csv(tmp_path: Path) -> None:

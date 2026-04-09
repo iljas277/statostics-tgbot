@@ -23,9 +23,6 @@ class Settings:
     web_reload: bool
     chart_default_days: int
     telegram_proxy_url: str | None
-    telegram_api_id: int | None
-    telegram_api_hash: str | None
-    telegram_api_session: str
     mtproto_metrics_posts_limit: int
     run_startup_tests: bool
 
@@ -83,9 +80,6 @@ def load_settings() -> Settings:
     web_reload = os.getenv("WEB_RELOAD", "false").strip().lower() in {"1", "true", "yes", "on"}
     chart_default_days = max(1, min(365, int(os.getenv("CHART_DEFAULT_DAYS", "14"))))
     telegram_proxy_url = os.getenv("TELEGRAM_PROXY_URL", "").strip() or None
-    telegram_api_id_raw = os.getenv("TELEGRAM_API_ID", "").strip()
-    telegram_api_hash = os.getenv("TELEGRAM_API_HASH", "").strip() or None
-    telegram_api_session = os.getenv("TELEGRAM_API_SESSION", "data/telethon.session").strip() or "data/telethon.session"
     mtproto_metrics_posts_limit = max(1, min(200, int(os.getenv("MTPROTO_METRICS_POSTS_LIMIT", "50"))))
     run_startup_tests = os.getenv("RUN_STARTUP_TESTS", "true").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -106,9 +100,6 @@ def load_settings() -> Settings:
         web_reload=web_reload,
         chart_default_days=chart_default_days,
         telegram_proxy_url=telegram_proxy_url,
-        telegram_api_id=int(telegram_api_id_raw) if telegram_api_id_raw else None,
-        telegram_api_hash=telegram_api_hash,
-        telegram_api_session=telegram_api_session,
         mtproto_metrics_posts_limit=mtproto_metrics_posts_limit,
         run_startup_tests=run_startup_tests,
     )

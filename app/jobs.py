@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 
 from telegram.ext import ContextTypes
 
 from app.repositories import BotRepository
-from app.telegram_api import TelegramApiMetricsService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,36 +36,5 @@ async def refresh_contacts_cache_job(context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def refresh_mtproto_metrics_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    repo: BotRepository = context.application.bot_data["repo"]
-    settings = context.application.bot_data["settings"]
-    service = TelegramApiMetricsService(settings=settings)
-    if not service.enabled:
-        return
-    try:
-        metrics = await service.fetch_recent_post_metrics(limit=settings.mtproto_metrics_posts_limit)
-    except Exception as exc:
-        LOGGER.warning("MTProto metrics refresh skipped: %s", exc)
-        return
-
-    if not metrics:
-        return
-    snapshot_at = datetime.now(tz=timezone.utc).isoformat()
-    count = repo.save_post_metrics_snapshots(
-        rows=[
-            {
-                "message_id": m.message_id,
-                "post_date": m.post_date,
-                "views": m.views,
-                "forwards": m.forwards,
-                "reactions_total": m.reactions_total,
-                "reactions_json": m.reactions_json,
-            }
-            for m in metrics
-        ],
-        snapshot_at=snapshot_at,
-    )
-    LOGGER.info(
-        "MTProto metrics refreshed: rows=%s posts_limit=%s",
-        count,
-        settings.mtproto_metrics_posts_limit,
-    )
+    _ = context
+    LOGGER.debug("Bot API metrics are captured on channel_post updates; scheduled refresh skipped.")

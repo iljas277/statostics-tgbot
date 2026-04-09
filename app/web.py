@@ -16,7 +16,6 @@ from app.charts import render_comments_trend_png, render_metric_trend_png
 from app.config import Settings
 from app.db import Database
 from app.repositories import BotRepository
-from app.telegram_api import TelegramApiMetricsService
 from app.telegram_api import describe_reaction_key
 
 
@@ -235,7 +234,7 @@ def create_web_app(settings: Settings) -> FastAPI:
         metric = repo.get_latest_post_metric(message_id=message_id)
         if not metric:
             return JSONResponse(
-                {"error": "not_found", "message": "No MTProto metrics for this post"},
+                {"error": "not_found", "message": "No Bot API metrics for this post"},
                 status_code=404,
             )
         reactions = metric.get("reactions") or {}
@@ -271,31 +270,13 @@ def create_web_app(settings: Settings) -> FastAPI:
 
     @app.get("/api/reactors/post/{message_id}", response_class=JSONResponse)
     async def api_post_reactors(message_id: int, limit: int = Query(default=2000, ge=1, le=10000)) -> JSONResponse:
-        mtproto = TelegramApiMetricsService(settings=settings)
-        if not mtproto.enabled:
-            return JSONResponse(
-                {"error": "mtproto_disabled", "message": "Set TELEGRAM_API_ID and TELEGRAM_API_HASH"},
-                status_code=400,
-            )
-        try:
-            reactors = await mtproto.fetch_post_reactors(message_id=message_id, limit=limit)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": "reactors_export_unavailable", "message": str(exc)},
-                status_code=400,
-            )
+        _ = (message_id, limit)
         return JSONResponse(
-            [
-                {
-                    "user_id": item.user_id,
-                    "nickname": item.nickname,
-                    "username": item.username,
-                    "reactions_count": item.reactions_count,
-                    "positive_count": item.positive_count,
-                    "negative_count": item.negative_count,
-                }
-                for item in reactors
-            ]
+            {
+                "error": "bot_api_limitation",
+                "message": "Telegram Bot API не предоставляет список пользователей, оставивших реакции у поста.",
+            },
+            status_code=501,
         )
 
     @app.get("/api/export/commenters/channel.csv")
@@ -348,7 +329,7 @@ def create_web_app(settings: Settings) -> FastAPI:
         metric = repo.get_latest_post_metric(message_id=message_id)
         if not metric:
             return JSONResponse(
-                {"error": "not_found", "message": "No MTProto metrics for this post"},
+                {"error": "not_found", "message": "No Bot API metrics for this post"},
                 status_code=404,
             )
         reactions = metric.get("reactions") or {}
@@ -364,32 +345,13 @@ def create_web_app(settings: Settings) -> FastAPI:
 
     @app.get("/api/export/reactors/post/{message_id}.csv")
     async def api_export_post_reactors_csv(message_id: int, limit: int = Query(default=2000, ge=1, le=10000)) -> Response:
-        mtproto = TelegramApiMetricsService(settings=settings)
-        if not mtproto.enabled:
-            return JSONResponse(
-                {"error": "mtproto_disabled", "message": "Set TELEGRAM_API_ID and TELEGRAM_API_HASH"},
-                status_code=400,
-            )
-        try:
-            reactors = await mtproto.fetch_post_reactors(message_id=message_id, limit=limit)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": "reactors_export_unavailable", "message": str(exc)},
-                status_code=400,
-            )
-        csv_rows = [
+        _ = (message_id, limit)
+        return JSONResponse(
             {
-                "nickname": item.nickname,
-                "reactions_count": item.reactions_count,
-                "positive_count": item.positive_count,
-                "negative_count": item.negative_count,
-            }
-            for item in reactors
-        ]
-        return _csv_response(
-            filename=f"post_{message_id}_reactors.csv",
-            rows=csv_rows,
-            headers=["nickname", "reactions_count", "positive_count", "negative_count"],
+                "error": "bot_api_limitation",
+                "message": "Telegram Bot API не предоставляет список пользователей, оставивших реакции у поста.",
+            },
+            status_code=501,
         )
 
     @app.get("/chart/comments.png")

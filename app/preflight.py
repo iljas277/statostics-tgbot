@@ -10,7 +10,6 @@ from telegram import Bot
 from telegram.request import HTTPXRequest
 
 from app.config import Settings
-from app.telegram_api import TelegramApiMetricsService
 
 
 LOGGER = logging.getLogger(__name__)
@@ -66,17 +65,6 @@ async def run_telegram_checks(settings: Settings) -> None:
         await bot.get_chat(settings.channel_id)
     finally:
         await bot.shutdown()
-
-    mtproto = TelegramApiMetricsService(settings=settings)
-    if mtproto.enabled:
-        try:
-            await mtproto.fetch_recent_post_metrics(limit=1)
-        except Exception as exc:
-            LOGGER.warning(
-                "MTProto startup check failed (%s). Bot API polling will continue.",
-                exc,
-            )
-
 
 def run_startup_tests(settings: Settings) -> None:
     run_local_tests()

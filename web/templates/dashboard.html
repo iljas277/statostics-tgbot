@@ -131,8 +131,8 @@
         <article class="card"><div class="label">Комментариев</div><div class="value">{{ summary.comments }}</div></article>
         <article class="card"><div class="label">Уникальных комментаторов</div><div class="value">{{ summary.unique_commenters }}</div></article>
         <article class="card"><div class="label">Средние уникальные просмотры/пост</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.views_total }}{% else %}—{% endif %}</div></article>
-        <article class="card"><div class="label">Реакции (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.reactions_total }}{% else %}—{% endif %}</div></article>
-        <article class="card"><div class="label">Репосты (MTProto)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.forwards_total }}{% else %}—{% endif %}</div></article>
+        <article class="card"><div class="label">Реакции (Bot API)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.reactions_total }}{% else %}—{% endif %}</div></article>
+        <article class="card"><div class="label">Репосты (Bot API)</div><div class="value">{% if summary.posts_sampled > 0 %}{{ summary.forwards_total }}{% else %}—{% endif %}</div></article>
       </section>
 
       <section class="panel">

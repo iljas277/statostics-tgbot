@@ -29,9 +29,6 @@ def _settings(db_path: Path) -> Settings:
         web_reload=False,
         chart_default_days=14,
         telegram_proxy_url=None,
-        telegram_api_id=None,
-        telegram_api_hash=None,
-        telegram_api_session="data/telethon.session",
         mtproto_metrics_posts_limit=50,
         run_startup_tests=False,
     )

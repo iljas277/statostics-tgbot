@@ -17,8 +17,8 @@ from app.repositories import BotRepository
 from app.services import analyze_comment
 from app.charts import render_comments_trend_png
 from app.charts import render_metric_trend_png
-from app.telegram_api import TelegramApiMetricsService
 from app.telegram_api import describe_reaction_key
+from app.telegram_api import extract_post_metric_from_bot_message
 
 LOGGER = logging.getLogger(__name__)
 
@@ -168,30 +168,6 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await cmd_start(update, context)
 
 
-async def _refresh_mtproto_metrics(context: ContextTypes.DEFAULT_TYPE, posts_limit: int) -> int:
-    settings = context.application.bot_data["settings"]
-    repo: BotRepository = context.application.bot_data["repo"]
-    mtproto = TelegramApiMetricsService(settings=settings)
-
-    metrics = await mtproto.fetch_recent_post_metrics(limit=posts_limit)
-    if not metrics:
-        return 0
-
-    snapshot_at = datetime.now(tz=timezone.utc).isoformat()
-    rows = [
-        {
-            "message_id": m.message_id,
-            "post_date": m.post_date,
-            "views": m.views,
-            "forwards": m.forwards,
-            "reactions_total": m.reactions_total,
-            "reactions_json": m.reactions_json,
-        }
-        for m in metrics
-    ]
-    return repo.save_post_metrics_snapshots(rows=rows, snapshot_at=snapshot_at)
-
-
 async def cmd_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data["settings"]
     repo: BotRepository = context.application.bot_data["repo"]
@@ -303,7 +279,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"• Комментариев на пост: <b>{comments_per_post:.2f}</b>\n"
         f"• Уникальных комментаторов: <b>{stats.unique_commenters}</b>\n"
         "\n"
-        f"📱 <b>Snapshot</b> (последних {channel_metrics.posts_sampled} постов):\n"
+        f"📱 <b>Snapshot Bot API</b> (последних {channel_metrics.posts_sampled} постов):\n"
         f"• Просмотры <b>{int(channel_metrics.avg_views_per_post)}</b>\n"
         f"• Реакции (сумма): <b>{channel_metrics.total_reactions}</b>\n"
         f"• Репосты (сумма): <b>{channel_metrics.total_forwards}</b>\n"
@@ -317,34 +293,9 @@ async def cmd_refreshmetrics(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not await _require_admin(update, settings.admin_ids):
         return
 
-    posts_limit = settings.mtproto_metrics_posts_limit
-    if context.args:
-        try:
-            posts_limit = max(1, min(200, int(context.args[0])))
-        except ValueError:
-            await update.effective_message.reply_text("Использование: /refreshmetrics [posts_limit]")
-            return
-
-    mtproto = TelegramApiMetricsService(settings=settings)
-    if not mtproto.enabled:
-        await update.effective_message.reply_text(
-            "MTProto не настроен. Укажите TELEGRAM_API_ID и TELEGRAM_API_HASH в .env"
-        )
-        return
-
-    try:
-        count = await _refresh_mtproto_metrics(context=context, posts_limit=posts_limit)
-    except Exception as exc:
-        LOGGER.warning("MTProto refresh failed: %s", exc)
-        await update.effective_message.reply_text(
-            "MTProto обновление не выполнено. Проверьте, что Telethon-сессия авторизована как пользователь, не как бот."
-        )
-        return
-
     await update.effective_message.reply_text(
-        "Метрики Telegram API обновлены\n"
-        f"- постов: {count}\n"
-        f"- окно: {posts_limit}"
+        "В режиме Bot API метрики обновляются автоматически при новых/изменённых постах канала.\n"
+        "Принудительная загрузка старых постов через /refreshmetrics недоступна."
     )
 
 
@@ -364,13 +315,11 @@ async def cmd_tgstats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     channel_metrics = repo.get_latest_channel_metric_stats(limit_posts=posts_limit)
     if channel_metrics.posts_sampled == 0:
-        await update.effective_message.reply_text(
-            "Нет данных MTProto. Выполните /refreshmetrics для загрузки просмотров и реакций."
-        )
+        await update.effective_message.reply_text("Нет сохранённых Bot API метрик по постам.")
         return
 
     text = (
-        f"📱 <b>Telegram API метрики</b> (последних {channel_metrics.posts_sampled} постов)\n\n"
+        f"📱 <b>Telegram Bot API метрики</b> (последних {channel_metrics.posts_sampled} постов)\n\n"
         f"• Уникальные просмотры (сумма по постам): <b>{channel_metrics.total_views}</b>\n"
         f"• Уникальные просмотры/пост (среднее): <b>{channel_metrics.avg_views_per_post:.1f}</b>\n"
         f"• Реакции (сумма): <b>{channel_metrics.total_reactions}</b>\n"
@@ -431,7 +380,7 @@ async def cmd_poststats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     metric = data.get("latest_metric")
     if metric:
         lines.append("")
-        lines.append("<b>MTProto метрики:</b>")
+        lines.append("<b>Bot API метрики:</b>")
         lines.append(f"• Уникальные просмотры поста: <b>{metric.get('views', 0)}</b>")
         lines.append(f"• Reactions: <b>{metric.get('reactions_total', 0)}</b>")
         lines.append(f"• Forwards: <b>{metric.get('forwards', 0)}</b>")
@@ -685,7 +634,7 @@ async def cmd_export_post_reactions_csv(update: Update, context: ContextTypes.DE
     metric = repo.get_latest_post_metric(message_id=message_id)
     if not metric:
         await update.effective_message.reply_text(
-            "Для этого поста нет MTProto-метрик. Сначала выполните /refreshmetrics."
+            "Для этого поста нет сохранённых Bot API-метрик."
         )
         return
 
@@ -813,6 +762,22 @@ async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     text = msg.text or msg.caption
     repo.upsert_post(channel_id=settings.channel_id, message_id=msg.message_id, text=text)
+    metric = extract_post_metric_from_bot_message(msg)
+    if metric:
+        snapshot_at = datetime.now(tz=timezone.utc).isoformat()
+        repo.save_post_metrics_snapshots(
+            rows=[
+                {
+                    "message_id": metric.message_id,
+                    "post_date": metric.post_date,
+                    "views": metric.views,
+                    "forwards": metric.forwards,
+                    "reactions_total": metric.reactions_total,
+                    "reactions_json": metric.reactions_json,
+                }
+            ],
+            snapshot_at=snapshot_at,
+        )
     LOGGER.debug("Channel post captured: message_id=%s", msg.message_id)
 
 

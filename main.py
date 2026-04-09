@@ -109,7 +109,7 @@ async def on_post_init(app: Application) -> None:
             BotCommand("poststats", "Аналитика по post message_id"),
             BotCommand("chart", "График комментариев"),
             BotCommand("viewschart", "График просмотров"),
-            BotCommand("refreshmetrics", "Обновить MTProto-метрики"),
+            BotCommand("refreshmetrics", "Справка по обновлению метрик Bot API"),
             BotCommand("contacts", "Топ комментаторов"),
             BotCommand("refreshcontacts", "Обновить кэш контактов"),
             BotCommand("export_user_metrics_csv", "CSV метрик пользователей"),

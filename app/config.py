@@ -45,8 +45,19 @@ def _parse_admin_ids(raw_value: str) -> set[int]:
     return admin_ids
 
 
+def _normalize_proxy_env() -> None:
+    # httpx does not accept "socks://" and expects "socks5://".
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        value = os.environ.get(key)
+        if not value:
+            continue
+        if value.startswith("socks://"):
+            os.environ[key] = "socks5://" + value[len("socks://") :]
+
+
 def load_settings() -> Settings:
     _load_dotenv(Path(".env"))
+    _normalize_proxy_env()
 
     bot_token = os.getenv("BOT_TOKEN", "").strip()
     if not bot_token:

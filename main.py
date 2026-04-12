@@ -7,23 +7,30 @@ from typing import TextIO
 from datetime import time
 from zoneinfo import ZoneInfo
 
+from telegram import Update
 from telegram.error import Conflict
 from telegram.error import NetworkError
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, MessageReactionHandler, filters
 
 from app.config import load_settings
 from app.config import Settings
 from app.db import Database
 from app.handlers import (
-    cmd_binddiscussion,
-    cmd_health,
+    MENU_COMMANDS,
     cmd_contacts,
-    cmd_delete,
-    cmd_edit,
+    cmd_exportcsv,
+    cmd_help,
+    cmd_postcommenters,
     cmd_poststats,
+    cmd_reactions,
+    cmd_reactiondebug,
+    cmd_reactionstats,
     cmd_refreshcontacts,
+    cmd_topcommenters,
+    cmd_topposts,
     on_channel_post,
-    cmd_post,
+    on_message_reaction,
+    on_message_reaction_count,
     cmd_start,
     cmd_stats,
     on_linked_chat_message,
@@ -60,7 +67,22 @@ async def on_error(update: object, context) -> None:
         return
 
     if isinstance(context.error, NetworkError):
-        LOGGER.warning("Transient Telegram network error: %s", context.error)
+        stats = context.application.bot_data.setdefault(
+            "network_error_stats",
+            {"count": 0, "last_error": None},
+        )
+        stats["count"] += 1
+        stats["last_error"] = str(context.error)
+
+        if stats["count"] == 1 or stats["count"] % 10 == 0:
+            LOGGER.warning(
+                "Transient Telegram network error #%s: %s. "
+                "Usually a temporary internet/proxy issue; polling will continue.",
+                stats["count"],
+                context.error,
+            )
+        else:
+            LOGGER.info("Transient Telegram network error #%s: %s", stats["count"], context.error)
         return
 
     LOGGER.exception("Unhandled bot error", exc_info=context.error)
@@ -71,10 +93,17 @@ async def on_post_init(app: Application) -> None:
     linked_chat_ids: set[int] = app.bot_data.setdefault("linked_chat_ids", set())
 
     try:
+        await app.bot.set_my_commands(MENU_COMMANDS)
+    except Exception as exc:
+        LOGGER.warning("Could not set bot command menu: %s", exc)
+
+    try:
         channel_chat = await app.bot.get_chat(settings.channel_id)
     except Exception as exc:
         LOGGER.warning("Could not read channel metadata for linked chat detection: %s", exc)
         return
+
+    app.bot_data["channel_username"] = getattr(channel_chat, "username", None)
 
     api_linked_chat_id = getattr(channel_chat, "linked_chat_id", None)
     if not api_linked_chat_id:
@@ -106,23 +135,45 @@ def build_app(settings: Settings) -> Application:
     app.bot_data["repo"] = repo
     app.bot_data["linked_chat_ids"] = {settings.linked_chat_id} if settings.linked_chat_id else set()
     app.bot_data["ingestion_counters"] = {"group_messages_seen": 0, "auto_forwards_seen": 0}
+    app.bot_data["reaction_counters"] = {
+        "message_reaction_seen": 0,
+        "message_reaction_count_seen": 0,
+        "last_message_reaction_at": None,
+        "last_message_reaction_count_at": None,
+    }
+    app.bot_data["network_error_stats"] = {"count": 0, "last_error": None}
 
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("post", cmd_post))
-    app.add_handler(CommandHandler("edit", cmd_edit))
-    app.add_handler(CommandHandler("delete", cmd_delete))
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("poststats", cmd_poststats))
+    app.add_handler(CommandHandler("reactions", cmd_reactions))
+    app.add_handler(CommandHandler("reactionstats", cmd_reactionstats))
+    app.add_handler(CommandHandler("topposts", cmd_topposts))
+    app.add_handler(CommandHandler("topcommenters", cmd_topcommenters))
+    app.add_handler(CommandHandler("postcommenters", cmd_postcommenters))
+    app.add_handler(CommandHandler("exportcsv", cmd_exportcsv))
+    app.add_handler(CommandHandler("reactiondebug", cmd_reactiondebug))
     app.add_handler(CommandHandler("contacts", cmd_contacts))
     app.add_handler(CommandHandler("refreshcontacts", cmd_refreshcontacts))
-    app.add_handler(CommandHandler("binddiscussion", cmd_binddiscussion))
-    app.add_handler(CommandHandler("health", cmd_health))
     app.add_error_handler(on_error)
 
     app.add_handler(
         MessageHandler(
             filters.Chat(chat_id=[settings.channel_id]) & filters.UpdateType.CHANNEL_POSTS,
             on_channel_post,
+        )
+    )
+    app.add_handler(
+        MessageReactionHandler(
+            on_message_reaction,
+            message_reaction_types=MessageReactionHandler.MESSAGE_REACTION_UPDATED,
+        )
+    )
+    app.add_handler(
+        MessageReactionHandler(
+            on_message_reaction_count,
+            message_reaction_types=MessageReactionHandler.MESSAGE_REACTION_COUNT_UPDATED,
         )
     )
     app.add_handler(MessageHandler(filters.ALL, on_linked_chat_message))
@@ -152,7 +203,7 @@ def main() -> None:
     app = build_app(settings)
     LOGGER.info("Bot started")
     try:
-        app.run_polling(allowed_updates=["message", "channel_post", "edited_channel_post"])
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
     finally:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
         lock_file.close()

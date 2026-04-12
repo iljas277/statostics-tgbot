@@ -40,6 +40,37 @@ CREATE TABLE IF NOT EXISTS comments (
     FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS message_reaction_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    actor_user_id INTEGER,
+    actor_chat_id INTEGER,
+    old_reaction TEXT NOT NULL,
+    new_reaction TEXT NOT NULL,
+    event_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS message_reaction_counts (
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    reaction_key TEXT NOT NULL,
+    total_count INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(channel_id, message_id, reaction_key)
+);
+
+CREATE TABLE IF NOT EXISTS message_reaction_count_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    snapshot TEXT NOT NULL,
+    total_count INTEGER NOT NULL,
+    event_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS leads (
     user_id INTEGER PRIMARY KEY,
     score INTEGER NOT NULL DEFAULT 0,
@@ -88,6 +119,11 @@ CREATE TABLE IF NOT EXISTS contacts_cache (
 CREATE INDEX IF NOT EXISTS idx_comments_channel_post_id ON comments(channel_post_id);
 CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
 CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at);
+CREATE INDEX IF NOT EXISTS idx_reaction_events_message_id ON message_reaction_events(message_id);
+CREATE INDEX IF NOT EXISTS idx_reaction_events_event_at ON message_reaction_events(event_at);
+CREATE INDEX IF NOT EXISTS idx_reaction_counts_message_id ON message_reaction_counts(message_id);
+CREATE INDEX IF NOT EXISTS idx_reaction_count_events_message_id ON message_reaction_count_events(message_id);
+CREATE INDEX IF NOT EXISTS idx_reaction_count_events_event_at ON message_reaction_count_events(event_at);
 CREATE INDEX IF NOT EXISTS idx_users_last_activity ON users(last_activity);
 CREATE INDEX IF NOT EXISTS idx_bot_actions_created_at ON bot_actions(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_cache_user_id ON contacts_cache(user_id);
